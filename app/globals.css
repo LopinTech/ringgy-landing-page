@@ -1,26 +1,155 @@
 @import "tailwindcss";
 
-:root {
-  --background: #ffffff;
-  --foreground: #171717;
-}
+@theme {
+  --font-sans: var(--font-roboto), system-ui, sans-serif;
 
-@theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
-}
+  --color-ink: #0F2540;
+  --color-ink-deep: #06203F;
+  --color-brand: #1557B0;
+  --color-brand-dark: #0F4A99;
+  --color-primary: #1F6FEB;
+  --color-accent-soft: #A9C8F5;
+  --color-body: #4A5A6C;
+  --color-muted: #58687B;
+  --color-text-2: #253546;
+  --color-subtle: #66768A;
+  --color-faint: #8693A3;
+  --color-line: #E3EAF5;
+  --color-line-2: #DCE3ED;
+  --color-surface: #F6F9FE;
+  --color-page: #F4F6FA;
+  --color-tint: #E3EDFC;
+  --color-tint-2: #EEF4FD;
+  --color-on-dark: #E8EEF6;
+  --color-on-dark-muted: #A9BCD4;
+  --color-on-dark-accent: #8FC0F5;
+  --color-on-dark-line: #1B3557;
+  --color-sky: #4D9BF5;
+  --color-success: #1F9D55;
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
+  --animate-rise: rise 0.7s cubic-bezier(0.2, 0.7, 0.2, 1) both;
+  --animate-rise-fast: rise 0.5s ease both;
+  --animate-halo: halo 2.2s ease-out infinite;
+  --animate-blink: blink 1.4s infinite;
+  --animate-drift: drift 34s linear infinite;
+  --animate-wave: wave 1.3s ease-in-out infinite;
+  --animate-dotpulse: dotpulse 1.2s infinite;
+
+  @keyframes rise {
+    from { opacity: 0; transform: translateY(20px); }
+    to { opacity: 1; transform: none; }
+  }
+  @keyframes wave {
+    0%, 100% { transform: scaleY(0.22); }
+    50% { transform: scaleY(1); }
+  }
+  @keyframes halo {
+    0% { transform: scale(0.9); opacity: 0.55; }
+    70%, 100% { transform: scale(1.9); opacity: 0; }
+  }
+  @keyframes blink {
+    0%, 45% { opacity: 1; }
+    50%, 100% { opacity: 0.15; }
+  }
+  @keyframes drift {
+    from { transform: translateX(0); }
+    to { transform: translateX(-50%); }
+  }
+  @keyframes dotpulse {
+    0%, 80%, 100% { transform: translateY(0); opacity: 0.35; }
+    40% { transform: translateY(-4px); opacity: 1; }
   }
 }
 
-body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+html {
+  scroll-behavior: smooth;
+  scroll-padding-top: 80px;
 }
+
+body {
+  margin: 0;
+  background: var(--color-page);
+  color: var(--color-ink);
+  -webkit-font-smoothing: antialiased;
+}
+
+/* Scroll-reveal: ScrollReveal hides below-the-fold [data-reveal] nodes, then animates them in. */
+[data-reveal][data-hidden] {
+  opacity: 0;
+}
+[data-reveal][data-shown] {
+  animation: rise 0.7s cubic-bezier(0.2, 0.7, 0.2, 1) both;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+
+/* Native range input styled as a filled track with a ring thumb (HVAC ROI calculator). */
+.range-slider {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 100%;
+  height: 26px;
+  margin: 0;
+  background: transparent;
+  cursor: pointer;
+}
+.range-slider::-webkit-slider-runnable-track {
+  height: 6px;
+  border-radius: 3px;
+  background: linear-gradient(to right, var(--color-primary) var(--fill, 0%), #E3E9F2 var(--fill, 0%));
+}
+.range-slider::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  width: 26px;
+  height: 26px;
+  margin-top: -10px;
+  border-radius: 50%;
+  background: #fff;
+  border: 6px solid var(--color-primary);
+  box-shadow: 0 4px 10px -2px rgba(31, 111, 235, 0.5);
+  cursor: grab;
+}
+.range-slider::-moz-range-track {
+  height: 6px;
+  border-radius: 3px;
+  background: #E3E9F2;
+}
+.range-slider::-moz-range-progress {
+  height: 6px;
+  border-radius: 3px;
+  background: var(--color-primary);
+}
+.range-slider::-moz-range-thumb {
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: #fff;
+  border: 6px solid var(--color-primary);
+  box-shadow: 0 4px 10px -2px rgba(31, 111, 235, 0.5);
+  cursor: grab;
+}
+.range-slider:focus-visible {
+  outline: 2px solid var(--color-primary);
+  outline-offset: 4px;
+  border-radius: 4px;
+}
+
+/* HVAC landing: flow diagram, CTA illustration and animated problem icons (used via inline `animation`). */
+@keyframes hwRing { 0% { transform: scale(1); opacity: .55; } 80%, 100% { transform: scale(1.45); opacity: 0; } }
+@keyframes hwFlow { to { stroke-dashoffset: -28; } }
+@keyframes hwFloat { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-6px); } }
+@keyframes hwGlow { 0%, 100% { opacity: .55; } 50% { opacity: 1; } }
+@keyframes ctaBar { 0%, 100% { transform: scaleY(.3); } 50% { transform: scaleY(1); } }
+@keyframes icShake { 0%, 55%, 100% { transform: rotate(0); } 60% { transform: rotate(-14deg); } 65% { transform: rotate(12deg); } 70% { transform: rotate(-10deg); } 75% { transform: rotate(8deg); } 80% { transform: rotate(0); } }
+@keyframes icPop { 0%, 60% { transform: scale(0); opacity: 0; } 70% { transform: scale(1.25); opacity: 1; } 80%, 92% { transform: scale(1); opacity: 1; } 100% { transform: scale(0); opacity: 0; } }
+@keyframes icSpin { to { transform: rotate(360deg); } }
+@keyframes icBob { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-2.2px); } }
+@keyframes icFlash { 0%, 45%, 100% { opacity: 1; transform: scale(1); } 50% { opacity: .35; transform: scale(.88); } 55% { opacity: 1; transform: scale(1.12); } 62% { transform: scale(1); } }
+@keyframes icSpark { 0%, 48% { opacity: 0; transform: scale(.4); } 55% { opacity: 1; transform: scale(1); } 75%, 100% { opacity: 0; transform: scale(1.4); } }
