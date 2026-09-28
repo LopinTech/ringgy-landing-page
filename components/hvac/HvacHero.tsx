@@ -63,12 +63,12 @@ export function HvacHero() {
                            <path d="M7 4.5v15l12.5-7.5z" />
                         </svg>
                      </span>
-                     Hear an HVAC Call
+                     Hear an Call
                   </button>
                   <a
                      href="#cta"
                      className="flex min-h-[74px] min-w-[220px] items-center justify-center rounded-lg border-[1.5px] border-primary px-[34px] text-[19px] font-medium text-primary transition-colors hover:bg-tint-2 hover:text-brand">
-                     Try Ringgy Free
+                     Try Live Demo
                   </a>
                </div>
                <div className="flex flex-wrap gap-x-8 gap-y-5">
