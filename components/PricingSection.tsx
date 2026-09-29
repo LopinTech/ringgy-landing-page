@@ -7,6 +7,7 @@ import {
    container,
    sectionPad,
 } from "./ui";
+import { withLivePlans } from "@/lib/live-plans";
 
 export type Plan = {
    name: string;
@@ -214,13 +215,14 @@ function PlanCard({ plan }: { plan: Plan }) {
 const DEFAULT_SUBTITLE =
    "Start small and scale as your business grows. Get all the essential features with transparent pricing and no long-term commitments.";
 
-export function PricingSection({
+export async function PricingSection({
    plans = PLANS,
    subtitle = DEFAULT_SUBTITLE,
 }: {
    plans?: Plan[];
    subtitle?: string;
 }) {
+   const livePlans = await withLivePlans(plans);
    return (
       <section
          id="pricing"
@@ -241,7 +243,7 @@ export function PricingSection({
                </p>
             </div>
             <div className="mt-[52px] grid grid-cols-[repeat(auto-fit,minmax(min(100%,255px),1fr))] items-stretch gap-5">
-               {plans.map((p) => (
+               {livePlans.map((p) => (
                   <PlanCard key={p.name} plan={p} />
                ))}
             </div>
