@@ -8,6 +8,7 @@ import {
    sectionPad,
 } from "./ui";
 import { withLivePlans } from "@/lib/live-plans";
+import { SIGNUP_URL } from "@/lib/site";
 
 export type Plan = {
    name: string;
@@ -197,7 +198,7 @@ function PlanCard({ plan }: { plan: Plan }) {
             ))}
          </ul>
          <a
-            href="#cta"
+            href={SIGNUP_URL}
             className={`mt-auto flex items-center justify-center gap-2.5 rounded-lg text-[17px] font-medium transition-colors ${
                f ?
                   "bg-primary py-[17px] text-white shadow-[0_12px_24px_-12px_rgba(31,111,235,.7)] hover:bg-brand"

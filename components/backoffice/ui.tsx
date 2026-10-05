@@ -115,6 +115,11 @@ const STATUS_TONES: Record<string, Tone> = {
   UNPAID: "danger",
   INCOMPLETE_EXPIRED: "danger",
   SUSPENDED: "danger",
+  // Free trial
+  GRACE: "warning",
+  EXPIRED: "neutral",
+  CONVERTED: "success",
+  TRIAL: "info",
 };
 
 export function StatusBadge({ status, title }: { status: string | null | undefined; title?: string }) {

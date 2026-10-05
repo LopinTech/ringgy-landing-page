@@ -3,7 +3,7 @@
 import { useRef, type ReactNode } from "react";
 import { CallPlayer, type CallLine, type CallPlayerHandle } from "./CallPlayer";
 import { ArrowRightIcon, PHONE_PATH, UsersIcon, VoiceMark } from "./ui";
-import { DEMO_PHONE_TEL } from "@/lib/site";
+import { DEMO_PHONE_TEL, SIGNUP_URL } from "@/lib/site";
 
 const SCRIPTS: Record<string, CallLine[]> = {
   hvac: [
@@ -90,10 +90,10 @@ export function Hero() {
               <ArrowRightIcon />
             </button>
             <a
-              href="#cta"
+              href={SIGNUP_URL}
               className="flex min-h-[76px] min-w-[240px] items-center justify-center rounded-lg border-[1.5px] border-primary px-9 text-xl font-medium text-primary transition-colors hover:bg-tint-2 hover:text-brand"
             >
-              Get Started
+              Start for Free
             </a>
           </div>
           <div className="flex flex-wrap gap-x-8 gap-y-5">

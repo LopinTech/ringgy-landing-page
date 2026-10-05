@@ -284,7 +284,55 @@ export type AdminTenant = {
   phoneNumbers: number;
   sip: string | null;
   period: null | { start: string; end: string; usedMinutes: number; includedMinutes: number; overageMinutes: number };
+  /** Whether live AI answering is switched on at Telnyx (off after a trial ends). */
+  answering: null | { enabled: boolean; inSync: boolean; error: string | null };
+  trial: AdminTrial | null;
+  trialReleaseError: string | null;
 };
+
+export type TrialStatus = "ACTIVE" | "GRACE" | "SUSPENDED" | "EXPIRED" | "CONVERTED";
+
+export type AdminTrial = {
+  status: TrialStatus;
+  startedAt: string;
+  endsAt: string;
+  graceEndsAt: string;
+  readOnlyEndsAt: string;
+  numberReleaseAt: string | null;
+  numbersReleasedAt: string | null;
+  convertedAt: string | null;
+  daysLeft: number;
+  includedMinutes: number;
+  usedMinutes: number;
+  minutesExhausted: boolean;
+  maxPhoneNumbers: number;
+};
+
+export type TrialPolicyInput = {
+  enabled: boolean;
+  oneTrialPerBusinessPhone: boolean;
+  durationDays: number;
+  includedMinutes: number;
+  maxPhoneNumbers: number;
+  stopAtMinuteLimit: boolean;
+  endingSoonDays: number;
+  graceDays: number;
+  readOnlyDays: number;
+  releaseNumbers: boolean;
+  numberRetentionDays: number;
+  numberReleaseNoticeDays: number;
+  note?: string;
+};
+
+export type TrialPolicy = TrialPolicyInput & {
+  id: string;
+  note: string | null;
+  effectiveFrom: string;
+  effectiveTo: string | null;
+  createdBy: string | null;
+};
+
+export type TrialPolicyResponse = { current: TrialPolicy; history: TrialPolicy[] };
 
 export type UsageTenantRow = ReportRow & {
   tenantId: string;

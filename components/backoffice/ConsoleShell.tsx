@@ -7,6 +7,7 @@ import { createContext, useContext, useEffect, useState, type ReactNode } from "
 import {
   BadgeDollarSign,
   ChartColumn,
+  Hourglass,
   Layers,
   LayoutDashboard,
   LogOut,
@@ -27,6 +28,7 @@ const NAV = [
   { href: "/backoffice/pricing", label: "Pricing", icon: BadgeDollarSign },
   { href: "/backoffice/plans", label: "Plans", icon: Layers },
   { href: "/backoffice/add-ons", label: "Add-ons", icon: PackagePlus },
+  { href: "/backoffice/trial", label: "Free trial", icon: Hourglass },
   { href: "/backoffice/phone-numbers", label: "Phone numbers", icon: Phone },
   { href: "/backoffice/customers", label: "Customers", icon: Users },
   { href: "/backoffice/usage", label: "Usage & costs", icon: ChartColumn },
