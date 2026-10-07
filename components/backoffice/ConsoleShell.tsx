@@ -11,6 +11,7 @@ import {
   Layers,
   LayoutDashboard,
   LogOut,
+  Mail,
   Menu,
   PackagePlus,
   Phone,
@@ -32,6 +33,7 @@ const NAV = [
   { href: "/backoffice/phone-numbers", label: "Phone numbers", icon: Phone },
   { href: "/backoffice/customers", label: "Customers", icon: Users },
   { href: "/backoffice/usage", label: "Usage & costs", icon: ChartColumn },
+  { href: "/backoffice/messages", label: "Messages", icon: Mail },
   { href: "/backoffice/sync", label: "Sync", icon: RefreshCw },
 ];
 

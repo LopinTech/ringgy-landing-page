@@ -1,16 +1,14 @@
 "use client";
 
-import { DEMO_PHONE_TEL } from "@/lib/site";
-import { useRef, type ReactNode } from "react";
-import { CallPlayer, type CallPlayerHandle } from "../CallPlayer";
-import { ArrowRightIcon } from "../ui";
+import { DEMO_PHONE_TEL, SIGNUP_URL } from "@/lib/site";
+import type { ReactNode } from "react";
+import { CallPlayer } from "../CallPlayer";
+import { ArrowRightIcon, CallIcon } from "../ui";
 import { HVAC_DEMO_CALL } from "./hvacDemoCall";
 
 const SCRIPTS = { demo: HVAC_DEMO_CALL };
 
 export function HvacHero() {
-   const player = useRef<CallPlayerHandle>(null);
-
    return (
       <section className="relative overflow-hidden bg-surface">
          <div className="pointer-events-none absolute -right-[140px] -top-10 h-[760px] w-[900px] rounded-full bg-[radial-gradient(ellipse_at_55%_45%,#E3EDFC_0%,#EAF1FD_45%,rgba(234,241,253,0)_72%)]" />
@@ -49,26 +47,16 @@ export function HvacHero() {
                   focused on the work.
                </p>
                <div className="mb-[52px] flex flex-wrap gap-5">
-                  <button
-                     type="button"
-                     onClick={() => player.current?.play()}
-                     className="flex cursor-pointer items-center gap-5 rounded-lg border-0 bg-brand py-3.5 pl-3.5 pr-[30px] text-[19px] font-medium text-white shadow-[0_14px_28px_-14px_rgba(21,87,176,.7)] transition-colors hover:bg-brand-dark">
-                     <span className="flex h-[46px] w-[46px] items-center justify-center rounded-full bg-white">
-                        <svg
-                           width="18"
-                           height="18"
-                           viewBox="0 0 24 24"
-                           fill="#1557B0"
-                           aria-hidden>
-                           <path d="M7 4.5v15l12.5-7.5z" />
-                        </svg>
-                     </span>
-                     Hear an Call
-                  </button>
                   <a
-                     href="#cta"
+                     href={DEMO_PHONE_TEL}
+                     className="flex items-center gap-5 rounded-lg bg-brand py-3.5 pl-3.5 pr-[30px] text-[19px] font-medium text-white shadow-[0_14px_28px_-14px_rgba(21,87,176,.7)] transition-colors hover:bg-brand-dark">
+                     <CallIcon size={46} />
+                     Make a Demo Call
+                  </a>
+                  <a
+                     href={SIGNUP_URL}
                      className="flex min-h-[74px] min-w-[220px] items-center justify-center rounded-lg border-[1.5px] border-primary px-[34px] text-[19px] font-medium text-primary transition-colors hover:bg-tint-2 hover:text-brand">
-                     Try Live Demo
+                     Try for Free
                   </a>
                </div>
                <div className="flex flex-wrap gap-x-8 gap-y-5">
@@ -158,7 +146,6 @@ export function HvacHero() {
 
             <div data-reveal="" className="relative">
                <CallPlayer
-                  ref={player}
                   scripts={SCRIPTS}
                   avatar="initials"
                   footer={

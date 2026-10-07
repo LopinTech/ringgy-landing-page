@@ -59,7 +59,7 @@ export function Navbar({ links = DEFAULT_LINKS, badge }: { links?: NavLink[]; ba
           href={SIGNUP_URL}
           className="flex-none whitespace-nowrap rounded-lg bg-brand px-4 py-2.5 text-sm sm:px-5 sm:py-[11px] sm:text-[15px] font-medium text-white shadow-[0_10px_20px_-12px_rgba(21,87,176,.8)] transition-[background-color,transform] duration-200 hover:-translate-y-px hover:bg-brand-dark"
         >
-          Start for Free
+          Try for Free
         </a>
       </div>
     </header>

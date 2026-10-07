@@ -1,8 +1,8 @@
 "use client";
 
-import { useRef, type ReactNode } from "react";
-import { CallPlayer, type CallLine, type CallPlayerHandle } from "./CallPlayer";
-import { ArrowRightIcon, PHONE_PATH, UsersIcon, VoiceMark } from "./ui";
+import type { ReactNode } from "react";
+import { CallPlayer, type CallLine } from "./CallPlayer";
+import { ArrowRightIcon, CallIcon, PHONE_PATH, UsersIcon, VoiceMark } from "./ui";
 import { DEMO_PHONE_TEL, SIGNUP_URL } from "@/lib/site";
 
 const SCRIPTS: Record<string, CallLine[]> = {
@@ -48,8 +48,6 @@ const OPTIONS = [
 ];
 
 export function Hero() {
-  const player = useRef<CallPlayerHandle>(null);
-
   return (
     <section className="relative overflow-hidden bg-surface">
       <div className="pointer-events-none absolute -right-[140px] -top-10 h-[760px] w-[900px] rounded-[48%_52%_45%_55%] bg-[radial-gradient(ellipse_at_55%_45%,#E3EDFC_0%,#EAF1FD_45%,rgba(234,241,253,0)_72%)]" />
@@ -76,24 +74,18 @@ export function Hero() {
             miss another opportunity.
           </p>
           <div className="mb-[52px] flex flex-wrap gap-6">
-            <button
-              type="button"
-              onClick={() => player.current?.play()}
-              className="flex cursor-pointer items-center gap-[22px] rounded-lg border-0 bg-brand py-3.5 pl-3.5 pr-8 text-xl font-medium text-white shadow-[0_14px_28px_-14px_rgba(21,87,176,.7)] transition-colors hover:bg-brand-dark"
+            <a
+              href={DEMO_PHONE_TEL}
+              className="flex items-center gap-[22px] rounded-lg bg-brand py-3.5 pl-3.5 pr-8 text-xl font-medium text-white shadow-[0_14px_28px_-14px_rgba(21,87,176,.7)] transition-colors hover:bg-brand-dark"
             >
-              <span className="flex h-12 w-12 items-center justify-center rounded-full bg-white">
-                <svg width="18" height="18" viewBox="0 0 24 24" fill="#1557B0" aria-hidden>
-                  <path d="M7 4.5v15l12.5-7.5z" />
-                </svg>
-              </span>
-              Try Live Demo
-              <ArrowRightIcon />
-            </button>
+              <CallIcon size={48} />
+              Make a Demo Call
+            </a>
             <a
               href={SIGNUP_URL}
               className="flex min-h-[76px] min-w-[240px] items-center justify-center rounded-lg border-[1.5px] border-primary px-9 text-xl font-medium text-primary transition-colors hover:bg-tint-2 hover:text-brand"
             >
-              Start for Free
+              Try for Free
             </a>
           </div>
           <div className="flex flex-wrap gap-x-8 gap-y-5">
@@ -123,7 +115,6 @@ export function Hero() {
 
         <div data-reveal="" className="relative">
           <CallPlayer
-            ref={player}
             scripts={SCRIPTS}
             options={OPTIONS}
             footer={

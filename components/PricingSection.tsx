@@ -16,10 +16,12 @@ export type Plan = {
    price: string;
    period?: string;
    features: string[];
-   cta: string;
    accent: string;
    tint: string;
    featured?: boolean;
+   /** Button label and link; default to "Try for Free" and the portal signup. */
+   cta?: string;
+   ctaHref?: string;
    icon: ReactNode;
 };
 
@@ -37,7 +39,6 @@ export const PLANS: Plan[] = [
          "Business knowledge base",
          "Basic dashboard & analytics",
       ],
-      cta: "Get Started",
       accent: "#1F6FEB",
       tint: "#E3EDFC",
       icon: (
@@ -70,7 +71,6 @@ export const PLANS: Plan[] = [
          "Human handoff to your team",
          "Priority support",
       ],
-      cta: "Get Started",
       accent: "#1F6FEB",
       tint: "#DCE8FB",
       featured: true,
@@ -88,7 +88,8 @@ export const PLANS: Plan[] = [
          "Dedicated onboarding assistance",
          "Priority & dedicated support",
       ],
-      cta: "Contact Sales",
+      cta: "Contact Us",
+      ctaHref: "#contact",
       accent: "#7C5CE6",
       tint: "#ECE6FC",
       icon: (
@@ -198,7 +199,7 @@ function PlanCard({ plan }: { plan: Plan }) {
             ))}
          </ul>
          <a
-            href={SIGNUP_URL}
+            href={plan.ctaHref ?? SIGNUP_URL}
             className={`mt-auto flex items-center justify-center gap-2.5 rounded-lg text-[17px] font-medium transition-colors ${
                f ?
                   "bg-primary py-[17px] text-white shadow-[0_12px_24px_-12px_rgba(31,111,235,.7)] hover:bg-brand"
@@ -206,7 +207,7 @@ function PlanCard({ plan }: { plan: Plan }) {
                   "border-[1.5px] border-[#7C5CE6] py-[15px] text-[#7C5CE6] hover:bg-[#F5F1FE]"
                :  "border-[1.5px] border-primary py-[15px] text-primary hover:bg-tint-2"
             }`}>
-            {plan.cta}
+            {plan.cta ?? "Try for Free"}
             <ArrowRightIcon size={18} />
          </a>
       </div>

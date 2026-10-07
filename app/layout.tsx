@@ -20,9 +20,6 @@ export const metadata: Metadata = {
     "after-hours call answering",
     "automated appointment booking",
   ],
-  icons: {
-    icon: "/assets/images/logo-mark.png",
-  },
 };
 
 export default function RootLayout({

@@ -16,6 +16,7 @@ import { IntegrationsSection } from "@/components/IntegrationsSection";
 import { PricingSection } from "@/components/PricingSection";
 import { FaqSection } from "@/components/FaqSection";
 import { FinalCta } from "@/components/FinalCta";
+import { ContactSection } from "@/components/ContactSection";
 import { Footer } from "@/components/Footer";
 import { ScrollReveal } from "@/components/ScrollReveal";
 
@@ -41,6 +42,7 @@ export function GeneralLanding() {
         <PricingSection />
         <FaqSection />
         <FinalCta />
+        <ContactSection />
       </main>
       <Footer />
       <ScrollReveal />

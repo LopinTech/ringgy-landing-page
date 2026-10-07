@@ -10,6 +10,7 @@ import { EmergencyRules } from "@/components/hvac/EmergencyRules";
 import { HvacRoi } from "@/components/hvac/HvacRoi";
 import { HvacFaq } from "@/components/hvac/HvacFaq";
 import { HvacCta } from "@/components/hvac/HvacCta";
+import { ContactSection } from "@/components/ContactSection";
 
 const NAV_LINKS = [
   { href: "#problems", label: "Problem" },
@@ -53,6 +54,7 @@ export function HvacLanding() {
         />
         <HvacFaq />
         <HvacCta />
+        <ContactSection />
       </main>
       <Footer badge="for HVAC" tagline="AI receptionist for heating & cooling companies" showPricingLink={false} />
       <ScrollReveal />

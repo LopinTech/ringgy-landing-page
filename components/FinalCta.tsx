@@ -1,4 +1,5 @@
 import { DEMO_PHONE_TEL, SIGNUP_URL } from "@/lib/site";
+import { CallIcon } from "./ui";
 
 export function FinalCta() {
   return (
@@ -13,10 +14,11 @@ export function FinalCta() {
           </p>
           <div className="flex flex-wrap justify-center gap-3">
             <a href={SIGNUP_URL} className="rounded bg-sky px-[30px] py-4 text-base font-bold text-ink-deep transition-colors hover:bg-[#7FB6F8]">
-              Start for Free
+              Try for Free
             </a>
-            <a href={DEMO_PHONE_TEL} className="rounded border border-[#2C4A72] px-[30px] py-4 text-base font-semibold text-on-dark transition-colors hover:bg-[#12263F]">
-              Call Our Demo →
+            <a href={DEMO_PHONE_TEL} className="flex items-center gap-3 rounded border border-[#2C4A72] px-[30px] py-[15px] text-base font-semibold text-on-dark transition-colors hover:bg-[#12263F]">
+              <CallIcon size={26} />
+              Make a Demo Call
             </a>
           </div>
         </div>

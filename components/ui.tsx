@@ -21,6 +21,16 @@ export function PhoneIcon({ size = 26, ...props }: IconProps) {
   );
 }
 
+/** The "Make a Demo Call" badge: a white disc with the brand phone. */
+export function CallIcon({ size = 48 }: { size?: number }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" className="flex-none" aria-hidden>
+      <circle cx="12" cy="12" r="12" fill="#fff" />
+      <path d={PHONE_PATH} fill="#1F6FEB" transform="translate(12 12) scale(.56) translate(-12 -12)" />
+    </svg>
+  );
+}
+
 export function UsersIcon({ size = 28, ...props }: IconProps) {
   return (
     <svg width={size} height={size} viewBox="0 0 24 24" fill="currentColor" aria-hidden {...props}>

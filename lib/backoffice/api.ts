@@ -2,9 +2,13 @@
  * Browser-side client for the backoffice API (NestJS, /admin/*).
  * The admin session is the httpOnly `rg_admin_session` cookie, so every call
  * goes out with credentials: 'include'.
+ *
+ * Calls go to this app's own origin and are proxied to the API by the
+ * rewrite in next.config.ts, which keeps the session cookie first-party
+ * (see there for why a direct cross-site call loses it on reload).
  */
 
-export const API_URL = (process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000").replace(/\/+$/, "");
+export const API_URL = "/backoffice/api";
 
 /** Fired on window whenever an authed call comes back 401; the console shell redirects to login. */
 export const UNAUTHORIZED_EVENT = "rg-admin-unauthorized";
@@ -49,7 +53,7 @@ export async function api<T>(path: string, opts: RequestOptions = {}): Promise<T
     });
   } catch (err) {
     if (err instanceof DOMException && err.name === "AbortError") throw err;
-    throw new ApiError(0, `Can't reach the API at ${API_URL}. Is the backend running?`);
+    throw new ApiError(0, "Can't reach the Ringgy API. Is the backend running?");
   }
 
   // Nest serialises a `null` return as an empty 200 body.
@@ -356,4 +360,18 @@ export type SyncReport = {
   numbersBilled: number;
   subscriptionsSynced: number;
   errors: string[];
+};
+
+/** A landing-page contact form message (GET /admin/contact-requests). */
+export type ContactRequest = {
+  id: string;
+  name: string;
+  email: string;
+  phone: string | null;
+  company: string | null;
+  message: string;
+  ip: string | null;
+  createdAt: string;
+  /** Null when the email to sales was not sent (not configured, or Resend failed). */
+  emailedAt: string | null;
 };

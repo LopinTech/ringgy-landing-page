@@ -1,4 +1,4 @@
-import { container, sectionPad } from "../ui";
+import { CallIcon, container, sectionPad } from "../ui";
 import { DEMO_PHONE_TEL, SIGNUP_URL } from "@/lib/site";
 
 export function HvacCta() {
@@ -17,10 +17,11 @@ export function HvacCta() {
             </p>
             <div className="flex flex-wrap gap-3.5">
               <a href={SIGNUP_URL} className="rounded-lg bg-white px-8 py-[18px] text-lg font-bold text-brand transition-colors hover:bg-tint-2 hover:text-brand-dark">
-                Start for Free
+                Try for Free
               </a>
-              <a href={DEMO_PHONE_TEL} className="rounded-lg border-[1.5px] border-[#8FC3FA] px-8 py-[18px] text-lg font-medium text-white transition-colors hover:bg-brand-dark">
-                Call Our HVAC Demo →
+              <a href={DEMO_PHONE_TEL} className="flex items-center gap-3 rounded-lg border-[1.5px] border-[#8FC3FA] px-8 py-[18px] text-lg font-medium text-white transition-colors hover:bg-brand-dark">
+                <CallIcon size={28} />
+                Make a Demo Call
               </a>
             </div>
           </div>
