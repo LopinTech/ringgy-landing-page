@@ -32,6 +32,14 @@ export default function RootLayout({
 }) {
   return (
     <html lang="en" className={`${roboto.variable} antialiased`}>
+      <head>
+        {/* RB2B visitor identification */}
+        <script
+          dangerouslySetInnerHTML={{
+            __html: `!function(key) {if (window.reb2b) return;window.reb2b = {loaded: true};var s = document.createElement("script");s.async = true;s.src = "https://ddwl4m2hdecbv.cloudfront.net/b/" + key + "/" + key + ".js.gz";document.getElementsByTagName("script")[0].parentNode.insertBefore(s, document.getElementsByTagName("script")[0]);}("0NW1GHJQ4XO4");`,
+          }}
+        />
+      </head>
       <body className="font-sans selection:bg-primary/20 selection:text-brand">
         {children}
       </body>
