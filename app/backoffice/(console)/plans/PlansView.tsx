@@ -732,8 +732,12 @@ export function PlansView() {
                   <tr>
                     <th className={th}>Feature</th>
                     {sortedPlans.map((p, i) => (
-                      <th key={p.id} className={`${th} text-center`}>
-                        <span className="inline-flex items-center gap-1.5">
+                      <th key={p.id} className={th}>
+                        {/* `th` hardcodes text-left; centering here via flex on a
+                            full-width wrapper instead of a conflicting text-center
+                            utility class, which Tailwind doesn't reliably let win
+                            over it when both are present. */}
+                        <span className="flex w-full items-center justify-center gap-1.5">
                           <span className="block size-2 rounded-[2px]" style={{ background: PALETTE[i % PALETTE.length] }} />
                           {p.name}
                         </span>
