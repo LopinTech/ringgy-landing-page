@@ -5,10 +5,23 @@ import { AlertTriangle, CheckCircle2, Info, Loader2, RefreshCw, X, XCircle } fro
 
 // ---- layout ------------------------------------------------------------------
 
-export function PageHeader({ title, description, actions }: { title: string; description?: ReactNode; actions?: ReactNode }) {
+export function PageHeader({
+  eyebrow,
+  title,
+  description,
+  actions,
+}: {
+  eyebrow?: string;
+  title: string;
+  description?: ReactNode;
+  actions?: ReactNode;
+}) {
   return (
     <div className="mb-5 flex flex-wrap items-end justify-between gap-3">
       <div className="min-w-0">
+        {eyebrow ? (
+          <div className="text-[12px] font-bold uppercase tracking-[.08em] text-faint">{eyebrow}</div>
+        ) : null}
         <h1 className="text-[22px] font-bold tracking-[-.01em] text-ink">{title}</h1>
         {description ? <p className="mt-1 max-w-3xl text-[13.5px] text-muted">{description}</p> : null}
       </div>
@@ -452,6 +465,29 @@ export function Drawer({
   children: ReactNode;
   footer?: ReactNode;
 }) {
+  // Starts off-screen/transparent and flips to visible a frame after mount,
+  // so it slides/fades in instead of popping into place. Closing stays
+  // instant (no exit transition): callers tie `children`/`title` to the same
+  // `open` flag, so an exit animation would show the panel sliding away
+  // empty — not just plain, already-rendered content disappearing.
+  const [visible, setVisible] = useState(false);
+  const [wasOpen, setWasOpen] = useState(open);
+
+  // Adjust state during render, not in an effect (same pattern as
+  // ConsoleShell's mobile-nav reset): each time `open` turns true, start
+  // the enter transition over so a second open re-animates instead of
+  // snapping straight to visible from the previous run's leftover state.
+  if (open !== wasOpen) {
+    setWasOpen(open);
+    if (open) setVisible(false);
+  }
+
+  useEffect(() => {
+    if (!open) return;
+    const raf = requestAnimationFrame(() => setVisible(true));
+    return () => cancelAnimationFrame(raf);
+  }, [open]);
+
   useEffect(() => {
     if (!open) return;
     const onKey = (e: KeyboardEvent) => {
@@ -464,8 +500,17 @@ export function Drawer({
   if (!open) return null;
   return (
     <div className="fixed inset-0 z-50 flex justify-end" role="dialog" aria-modal="true">
-      <button type="button" aria-label="Close" className="absolute inset-0 bg-ink-deep/40" onClick={onClose} />
-      <div className="relative flex h-full w-full max-w-[640px] flex-col bg-white shadow-2xl">
+      <button
+        type="button"
+        aria-label="Close"
+        className={`absolute inset-0 bg-ink-deep/40 transition-opacity duration-200 ease-out ${visible ? "opacity-100" : "opacity-0"}`}
+        onClick={onClose}
+      />
+      <div
+        className={`relative flex h-full w-full max-w-[640px] flex-col bg-white shadow-2xl transition-transform duration-200 ease-out ${
+          visible ? "translate-x-0" : "translate-x-full"
+        }`}
+      >
         <div className="flex items-start justify-between gap-3 border-b border-line px-5 py-3.5">
           <div className="min-w-0">
             <h2 className="text-[17px] font-bold text-ink">{title}</h2>

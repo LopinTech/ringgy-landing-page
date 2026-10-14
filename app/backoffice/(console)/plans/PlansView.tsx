@@ -29,6 +29,7 @@ import {
   type AdminAddOn,
   type AdminPlan,
   type PlanInput,
+  type Overview,
   type PricingResponse,
   type TrialPolicy,
   type TrialPolicyInput,
@@ -51,6 +52,16 @@ import {
 /** A stable, purely cosmetic color per plan card / table column. */
 const PALETTE = ["#2F6BFF", "#0E7C66", "#6B4BFF", "#E0562F", "#9A6B2F"];
 const TRIAL_COLOR = "#9AA2B4";
+
+/**
+ * The "Unlimited" checkbox on a limit field stores this sentinel rather
+ * than null, so it never touches the real usage/billing math elsewhere
+ * (which assumes a finite included amount — null there would coerce to 0 in
+ * arithmetic, the opposite of unlimited). Must match UNLIMITED_INCLUDED in
+ * ringgy-backend's admin-catalog.service.ts.
+ */
+const UNLIMITED_INCLUDED = 999_999;
+const isUnlimited = (n: number) => n >= UNLIMITED_INCLUDED;
 
 function intOrNull(s: string, min: number, max = Number.MAX_SAFE_INTEGER): number | null {
   const t = s.trim();
@@ -128,25 +139,110 @@ type PlanDraft = {
   price?: string;
   includedMinutes?: string;
   includedPhoneNumbers?: string;
+  includedSms?: string;
   overage?: string;
   overageEnabled?: boolean;
   usageWarningPercent?: string;
   isPublic?: boolean;
   highlight?: boolean;
+  features?: string[];
 };
 
-type GroupKey = "usage" | "overage" | "signup";
+type GroupKey = "calls" | "messaging" | "integrations" | "usage" | "overage" | "signup";
 const GROUPS: { key: GroupKey; label: string }[] = [
+  { key: "calls", label: "Calls" },
+  { key: "messaging", label: "Messaging" },
+  { key: "integrations", label: "Integrations" },
   { key: "usage", label: "Usage limits" },
   { key: "overage", label: "Overage" },
   { key: "signup", label: "Signup" },
 ];
+
+/**
+ * These toggles edit the plan's existing freeform marketing "features" list
+ * (the same field the plan drawer already edits) — each one just adds or
+ * removes its exact label from that list. They are copy shown on the
+ * pricing/signup page, not real functional gates: Ringgy has no per-plan
+ * enforcement for call recording, SMS, missed-call text-back or Google
+ * Calendar today (Calendar works the same for every tenant regardless of
+ * plan). Toggling one here does not turn the underlying feature on or off.
+ */
+const CALLS_FEATURES = [
+  { label: "Call transcripts", desc: "Full transcript for every call in the dashboard." },
+  { label: "Call recordings", desc: "Audio playback and download." },
+];
+const MESSAGING_FEATURES = [
+  { label: "SMS confirmations", desc: "Text the caller after booking." },
+  { label: "Missed-call text back", desc: "Auto-text callers who hang up early." },
+];
+const INTEGRATIONS_FEATURES = [{ label: "Google Calendar integration", desc: "Copy bookings to a Google Calendar." }];
+const ALL_TOGGLE_FEATURES = [...CALLS_FEATURES, ...MESSAGING_FEATURES, ...INTEGRATIONS_FEATURES];
+
+/** A usage-limit cell: a number input plus its own "Unlimited" checkbox. */
+function LimitCell({
+  value,
+  unit,
+  invalid,
+  unlimited,
+  onChange,
+  onToggleUnlimited,
+  ariaLabel,
+}: {
+  value: string;
+  unit: string;
+  invalid: boolean;
+  unlimited: boolean;
+  onChange: (v: string) => void;
+  onToggleUnlimited: (v: boolean) => void;
+  ariaLabel: string;
+}) {
+  return (
+    <div className="mx-auto flex max-w-[130px] flex-col items-center gap-1.5">
+      <div className="relative w-full">
+        <input
+          inputMode="numeric"
+          className={`${inputClass} pr-9 text-right`}
+          value={unlimited ? "" : value}
+          placeholder={unlimited ? "Unlimited" : undefined}
+          disabled={unlimited}
+          aria-invalid={invalid || undefined}
+          aria-label={ariaLabel}
+          onChange={(e) => onChange(e.target.value)}
+        />
+        <span className="pointer-events-none absolute inset-y-0 right-2 flex items-center text-[11.5px] text-subtle">{unit}</span>
+      </div>
+      <label className="flex items-center gap-1.5 text-[11.5px] font-medium text-text-2">
+        <input type="checkbox" className="size-3.5 accent-brand" checked={unlimited} onChange={(e) => onToggleUnlimited(e.target.checked)} />
+        Unlimited
+      </label>
+    </div>
+  );
+}
+
+/** The pill-style on/off switch used throughout the settings grid. */
+function ToggleSwitch({ checked, onChange, label }: { checked: boolean; onChange: (v: boolean) => void; label: string }) {
+  return (
+    <button
+      type="button"
+      role="switch"
+      aria-checked={checked}
+      aria-label={label}
+      onClick={() => onChange(!checked)}
+      className={`relative h-[26px] w-11 flex-none rounded-full transition-colors ${checked ? "bg-brand" : "bg-[#D5DAE4]"}`}
+    >
+      <span
+        className={`absolute top-[3px] size-5 rounded-full bg-white shadow transition-[left] ${checked ? "left-[21px]" : "left-[3px]"}`}
+      />
+    </button>
+  );
+}
 
 export function PlansView() {
   const plans = useApi<AdminPlan[]>("/admin/plans");
   const addOns = useApi<AdminAddOn[]>("/admin/add-ons");
   const trialPolicy = useApi<TrialPolicyResponse>("/admin/trial-policy");
   const pricing = useApi<PricingResponse>("/admin/pricing");
+  const overview = useApi<Overview>("/admin/overview");
   const internalCpm = pricing.data?.current?.internalCentsPerMin ?? null;
 
   const [flash, setFlash] = useState<Flash | null>(null);
@@ -172,15 +268,41 @@ export function PlansView() {
   const draftFor = (id: string): PlanDraft => planDrafts[id] ?? {};
   const priceVal = (p: AdminPlan) => draftFor(p.id).price ?? centsToDollarInput(p.priceCents);
   const overageVal = (p: AdminPlan) => draftFor(p.id).overage ?? rateToDollarInput(p.overageCentsPerMin);
-  const strVal = (p: AdminPlan, key: "includedMinutes" | "includedPhoneNumbers" | "usageWarningPercent") =>
+  const strVal = (p: AdminPlan, key: "includedMinutes" | "includedPhoneNumbers" | "includedSms" | "usageWarningPercent") =>
     draftFor(p.id)[key] ?? String(p[key]);
+  const numVal = (p: AdminPlan, key: "includedMinutes" | "includedPhoneNumbers" | "includedSms") =>
+    intOrNull(strVal(p, key), 0) ?? p[key];
+  const setUnlimited = (p: AdminPlan, key: "includedMinutes" | "includedPhoneNumbers" | "includedSms", unlimited: boolean) =>
+    setField(p.id, key, unlimited ? String(UNLIMITED_INCLUDED) : "0");
   const boolVal = (p: AdminPlan, key: "overageEnabled" | "isPublic" | "highlight") => {
     const d = draftFor(p.id)[key];
     return d !== undefined ? d : p[key];
   };
+  const featuresVal = (p: AdminPlan) => draftFor(p.id).features ?? p.features;
+  const hasFeature = (p: AdminPlan, label: string) => featuresVal(p).includes(label);
 
   const setField = <K extends keyof PlanDraft>(id: string, key: K, value: PlanDraft[K]) =>
     setPlanDrafts((prev) => ({ ...prev, [id]: { ...prev[id], [key]: value } }));
+
+  const setFeatureState = (p: AdminPlan, label: string, on: boolean) => {
+    const current = featuresVal(p);
+    const next = on ? (current.includes(label) ? current : [...current, label]) : current.filter((f) => f !== label);
+    setField(p.id, "features", next);
+  };
+  const toggleFeature = (p: AdminPlan, label: string) => setFeatureState(p, label, !hasFeature(p, label));
+
+  /** Group-header "Turn all on/off" — null when the group has no bulk-eligible toggle. */
+  function groupBulkInfo(p: AdminPlan, toggles: { get: (p: AdminPlan) => boolean; set: (p: AdminPlan, v: boolean) => void }[]) {
+    if (toggles.length === 0) return null;
+    const allOn = toggles.every((t) => t.get(p));
+    return { label: allOn ? "Turn all off" : "Turn all on", onClick: () => toggles.forEach((t) => t.set(p, !allOn)) };
+  }
+  const callsToggles = CALLS_FEATURES.map((f) => ({ get: (p: AdminPlan) => hasFeature(p, f.label), set: (p: AdminPlan, v: boolean) => setFeatureState(p, f.label, v) }));
+  const messagingToggles = MESSAGING_FEATURES.map((f) => ({ get: (p: AdminPlan) => hasFeature(p, f.label), set: (p: AdminPlan, v: boolean) => setFeatureState(p, f.label, v) }));
+  const integrationsToggles = INTEGRATIONS_FEATURES.map((f) => ({ get: (p: AdminPlan) => hasFeature(p, f.label), set: (p: AdminPlan, v: boolean) => setFeatureState(p, f.label, v) }));
+  const overageToggles = [{ get: (p: AdminPlan) => boolVal(p, "overageEnabled"), set: (p: AdminPlan, v: boolean) => setField(p.id, "overageEnabled", v) }];
+  // Highlight is exclusive, so it's left out of the bulk action (matches the mock).
+  const signupToggles = [{ get: (p: AdminPlan) => boolVal(p, "isPublic"), set: (p: AdminPlan, v: boolean) => setField(p.id, "isPublic", v) }];
 
   /** Highlight is exclusive: turning it on for one plan turns it off for the rest. */
   const setHighlight = (id: string, value: boolean) =>
@@ -195,19 +317,22 @@ export function PlansView() {
       priceVal(p) !== centsToDollarInput(p.priceCents) ||
       strVal(p, "includedMinutes") !== String(p.includedMinutes) ||
       strVal(p, "includedPhoneNumbers") !== String(p.includedPhoneNumbers) ||
+      strVal(p, "includedSms") !== String(p.includedSms) ||
       overageVal(p) !== rateToDollarInput(p.overageCentsPerMin) ||
       boolVal(p, "overageEnabled") !== p.overageEnabled ||
       strVal(p, "usageWarningPercent") !== String(p.usageWarningPercent) ||
       boolVal(p, "isPublic") !== p.isPublic ||
-      boolVal(p, "highlight") !== p.highlight
+      boolVal(p, "highlight") !== p.highlight ||
+      JSON.stringify(featuresVal(p)) !== JSON.stringify(p.features)
     );
   }
 
   function planFieldErrors(p: AdminPlan) {
     return {
       price: dollarInputToCents(priceVal(p)) === null,
-      includedMinutes: intOrNull(strVal(p, "includedMinutes"), 0) === null,
-      includedPhoneNumbers: intOrNull(strVal(p, "includedPhoneNumbers"), 0, 100) === null,
+      includedMinutes: intOrNull(strVal(p, "includedMinutes"), 0, UNLIMITED_INCLUDED) === null,
+      includedPhoneNumbers: intOrNull(strVal(p, "includedPhoneNumbers"), 0, UNLIMITED_INCLUDED) === null,
+      includedSms: intOrNull(strVal(p, "includedSms"), 0, UNLIMITED_INCLUDED) === null,
       overage: dollarRateInputToCentsPerMin(overageVal(p)) === null,
       usageWarningPercent: intOrNull(strVal(p, "usageWarningPercent"), 1, 100) === null,
     };
@@ -219,13 +344,15 @@ export function PlansView() {
     return {
       ...p,
       priceCents: dollarInputToCents(priceVal(p)) ?? p.priceCents,
-      includedMinutes: intOrNull(strVal(p, "includedMinutes"), 0) ?? p.includedMinutes,
-      includedPhoneNumbers: intOrNull(strVal(p, "includedPhoneNumbers"), 0, 100) ?? p.includedPhoneNumbers,
+      includedMinutes: intOrNull(strVal(p, "includedMinutes"), 0, UNLIMITED_INCLUDED) ?? p.includedMinutes,
+      includedPhoneNumbers: intOrNull(strVal(p, "includedPhoneNumbers"), 0, UNLIMITED_INCLUDED) ?? p.includedPhoneNumbers,
+      includedSms: intOrNull(strVal(p, "includedSms"), 0, UNLIMITED_INCLUDED) ?? p.includedSms,
       overageCentsPerMin: dollarRateInputToCentsPerMin(overageVal(p)) ?? p.overageCentsPerMin,
       overageEnabled: boolVal(p, "overageEnabled"),
       usageWarningPercent: intOrNull(strVal(p, "usageWarningPercent"), 1, 100) ?? p.usageWarningPercent,
       isPublic: boolVal(p, "isPublic"),
       highlight: boolVal(p, "highlight"),
+      features: featuresVal(p),
     };
   }
 
@@ -237,6 +364,7 @@ export function PlansView() {
       priceCents: e.priceCents,
       includedMinutes: e.includedMinutes,
       includedPhoneNumbers: e.includedPhoneNumbers,
+      includedSms: e.includedSms,
       overageCentsPerMin: e.overageCentsPerMin,
       overageEnabled: e.overageEnabled,
       usageWarningPercent: e.usageWarningPercent,
@@ -394,11 +522,38 @@ export function PlansView() {
     return !q || label.toLowerCase().includes(q);
   };
   const groupHasRows = (group: GroupKey) =>
-    group === "usage"
-      ? visible("usage", "Included minutes") || visible("usage", "Included phone numbers")
-      : group === "overage"
-        ? visible("overage", "Enable overage") || visible("overage", "Overage price") || visible("overage", "Usage warning at")
-        : visible("signup", "Offered on signup") || visible("signup", "Highlight");
+    group === "calls"
+      ? CALLS_FEATURES.some((f) => visible("calls", f.label))
+      : group === "messaging"
+        ? MESSAGING_FEATURES.some((f) => visible("messaging", f.label))
+        : group === "integrations"
+          ? INTEGRATIONS_FEATURES.some((f) => visible("integrations", f.label))
+          : group === "usage"
+            ? visible("usage", "Call minutes") || visible("usage", "SMS") || visible("usage", "Phone numbers")
+            : group === "overage"
+              ? visible("overage", "Enable overage") || visible("overage", "Overage price") || visible("overage", "Usage warning at")
+              : visible("signup", "Show in signup") || visible("signup", "Highlight");
+
+  /** A group header row: the group name, plus a "Turn all on/off" link per plan column. */
+  function groupHeaderRow(label: string, toggles: { get: (p: AdminPlan) => boolean; set: (p: AdminPlan, v: boolean) => void }[]) {
+    return (
+      <tr>
+        <td className="bg-surface px-3 py-2 text-[12.5px] font-extrabold text-text-2">{label}</td>
+        {sortedPlans.map((p) => {
+          const bulk = groupBulkInfo(p, toggles);
+          return (
+            <td key={p.id} className="bg-surface px-2 py-2 text-center">
+              {bulk ? (
+                <button type="button" onClick={bulk.onClick} className="text-[12px] font-bold text-brand hover:underline">
+                  {bulk.label}
+                </button>
+              ) : null}
+            </td>
+          );
+        })}
+      </tr>
+    );
+  }
 
   function afterFormSaved(result: WithStripeError<AdminPlan>, verb: string) {
     setEditingPlan(null);
@@ -421,8 +576,9 @@ export function PlansView() {
   return (
     <>
       <PageHeader
+        eyebrow="Admin"
         title="Plans & permissions"
-        description="Manage plan pricing, usage limits, and the free-trial policy new signups get."
+        description="Choose which features each plan includes and set usage limits."
         actions={
           <Button variant="primary" icon={<Plus size={15} aria-hidden />} onClick={() => setEditingPlan("new")}>
             New plan
@@ -434,7 +590,7 @@ export function PlansView() {
         <input
           value={query}
           onChange={(e) => setQuery(e.target.value)}
-          placeholder="Search settings"
+          placeholder="Search features"
           className={`${inputBase} h-10 w-full max-w-xs pl-3`}
         />
       </div>
@@ -456,6 +612,11 @@ export function PlansView() {
                 <div className="flex items-center gap-2">
                   <span className="block size-2.5 rounded-[3px]" style={{ background: TRIAL_COLOR }} />
                   <span className="flex-1 text-[15px] font-extrabold">Free Trial</span>
+                  {overview.data ? (
+                    <span className="rounded-full bg-surface px-2 py-0.5 text-[11.5px] font-bold text-subtle">
+                      {formatInt(overview.data.trialTenants)} accounts
+                    </span>
+                  ) : null}
                   <button
                     type="button"
                     title="Trial settings"
@@ -481,6 +642,7 @@ export function PlansView() {
                   const color = PALETTE[i % PALETTE.length];
                   const highlighted = boolVal(p, "highlight");
                   const hidden = !boolVal(p, "isPublic");
+                  const enabledFeatures = ALL_TOGGLE_FEATURES.filter((f) => hasFeature(p, f.label)).length;
                   return (
                     <Card key={p.id} bodyClassName="p-4 space-y-3" className={planDirty(p) ? "border-amber-300" : ""}>
                       <div className="flex items-center gap-2">
@@ -503,7 +665,8 @@ export function PlansView() {
                       </div>
                       <MoneyInput value={priceVal(p)} onChange={(v) => setField(p.id, "price", v)} suffix="/mo" invalid={planFieldErrors(p).price} />
                       <div className="text-[12.5px] text-subtle">
-                        {formatInt(p.includedMinutes)} min · {p.includedPhoneNumbers} number{p.includedPhoneNumbers === 1 ? "" : "s"}/mo
+                        {enabledFeatures} of {ALL_TOGGLE_FEATURES.length} features ·{" "}
+                        {isUnlimited(p.includedMinutes) ? "Unlimited" : `${formatInt(p.includedMinutes)} min`}
                       </div>
                     </Card>
                   );
@@ -567,70 +730,160 @@ export function PlansView() {
               <Table minWidth={320 + list.length * 170}>
                 <thead>
                   <tr>
-                    <th className={th}>Setting</th>
-                    {sortedPlans.map((p) => (
-                      <th key={p.id} className={`${th} text-center`}>
-                        {p.name}
+                    <th className={th}>Feature</th>
+                    {sortedPlans.map((p, i) => (
+                      <th key={p.id} className={th}>
+                        {/* `th` hardcodes text-left; centering here via flex on a
+                            full-width wrapper instead of a conflicting text-center
+                            utility class, which Tailwind doesn't reliably let win
+                            over it when both are present. */}
+                        <span className="flex w-full items-center justify-center gap-1.5">
+                          <span className="block size-2 rounded-[2px]" style={{ background: PALETTE[i % PALETTE.length] }} />
+                          {p.name}
+                        </span>
                       </th>
                     ))}
                   </tr>
                 </thead>
                 <tbody>
-                  {groupHasRows("usage") ? (
-                    <tr>
-                      <td colSpan={1 + list.length} className="bg-surface px-3 py-2 text-[12.5px] font-extrabold text-text-2">
-                        Usage limits
-                      </td>
-                    </tr>
-                  ) : null}
-                  {visible("usage", "Included minutes") ? (
+                  {groupHasRows("calls") ? groupHeaderRow("Calls", callsToggles) : null}
+                  {CALLS_FEATURES.map((f) =>
+                    visible("calls", f.label) ? (
+                      <tr key={f.label} className={tr}>
+                        <td className={td}>
+                          <div className="font-bold text-text-2">{f.label}</div>
+                          <div className="text-[12px] text-subtle">{f.desc}</div>
+                        </td>
+                        {sortedPlans.map((p) => (
+                          <td key={p.id} className={`${td} text-center`}>
+                            <ToggleSwitch
+                              checked={hasFeature(p, f.label)}
+                              label={`${f.label} for ${p.name}`}
+                              onChange={() => toggleFeature(p, f.label)}
+                            />
+                          </td>
+                        ))}
+                      </tr>
+                    ) : null,
+                  )}
+
+                  {groupHasRows("messaging") ? groupHeaderRow("Messaging", messagingToggles) : null}
+                  {MESSAGING_FEATURES.map((f) =>
+                    visible("messaging", f.label) ? (
+                      <tr key={f.label} className={tr}>
+                        <td className={td}>
+                          <div className="font-bold text-text-2">{f.label}</div>
+                          <div className="text-[12px] text-subtle">{f.desc}</div>
+                        </td>
+                        {sortedPlans.map((p) => (
+                          <td key={p.id} className={`${td} text-center`}>
+                            <ToggleSwitch
+                              checked={hasFeature(p, f.label)}
+                              label={`${f.label} for ${p.name}`}
+                              onChange={() => toggleFeature(p, f.label)}
+                            />
+                          </td>
+                        ))}
+                      </tr>
+                    ) : null,
+                  )}
+
+                  {groupHasRows("integrations") ? groupHeaderRow("Integrations", integrationsToggles) : null}
+                  {INTEGRATIONS_FEATURES.map((f) =>
+                    visible("integrations", f.label) ? (
+                      <tr key={f.label} className={tr}>
+                        <td className={td}>
+                          <div className="font-bold text-text-2">{f.label}</div>
+                          <div className="text-[12px] text-subtle">{f.desc}</div>
+                        </td>
+                        {sortedPlans.map((p) => (
+                          <td key={p.id} className={`${td} text-center`}>
+                            <ToggleSwitch
+                              checked={hasFeature(p, f.label)}
+                              label={`${f.label} for ${p.name}`}
+                              onChange={() => toggleFeature(p, f.label)}
+                            />
+                          </td>
+                        ))}
+                      </tr>
+                    ) : null,
+                  )}
+
+                  {groupHasRows("usage") ? groupHeaderRow("Usage limits", []) : null}
+                  {visible("usage", "Call minutes") ? (
                     <tr className={tr}>
                       <td className={td}>
-                        <div className="font-bold text-text-2">Included minutes</div>
+                        <div className="flex items-center gap-1.5">
+                          <span className="font-bold text-text-2">Call minutes</span>
+                          <Badge>Limit</Badge>
+                        </div>
                         <div className="text-[12px] text-subtle">Included per month before overage.</div>
                       </td>
                       {sortedPlans.map((p) => (
                         <td key={p.id} className={`${td} text-center`}>
-                          <input
-                            inputMode="numeric"
-                            className={`${inputClass} mx-auto max-w-[110px] text-right`}
+                          <LimitCell
                             value={strVal(p, "includedMinutes")}
-                            aria-invalid={planFieldErrors(p).includedMinutes || undefined}
-                            aria-label={`Included minutes for ${p.name}`}
-                            onChange={(e) => setField(p.id, "includedMinutes", e.target.value)}
+                            unit="min"
+                            invalid={planFieldErrors(p).includedMinutes}
+                            unlimited={isUnlimited(numVal(p, "includedMinutes"))}
+                            onChange={(v) => setField(p.id, "includedMinutes", v)}
+                            onToggleUnlimited={(v) => setUnlimited(p, "includedMinutes", v)}
+                            ariaLabel={`Call minutes for ${p.name}`}
                           />
                         </td>
                       ))}
                     </tr>
                   ) : null}
-                  {visible("usage", "Included phone numbers") ? (
+                  {visible("usage", "SMS") ? (
                     <tr className={tr}>
                       <td className={td}>
-                        <div className="font-bold text-text-2">Included phone numbers</div>
+                        <div className="flex items-center gap-1.5">
+                          <span className="font-bold text-text-2">SMS</span>
+                          <Badge>Limit</Badge>
+                        </div>
+                        <div className="text-[12px] text-subtle">Messages included per month.</div>
+                      </td>
+                      {sortedPlans.map((p) => (
+                        <td key={p.id} className={`${td} text-center`}>
+                          <LimitCell
+                            value={strVal(p, "includedSms")}
+                            unit="sms"
+                            invalid={planFieldErrors(p).includedSms}
+                            unlimited={isUnlimited(numVal(p, "includedSms"))}
+                            onChange={(v) => setField(p.id, "includedSms", v)}
+                            onToggleUnlimited={(v) => setUnlimited(p, "includedSms", v)}
+                            ariaLabel={`SMS limit for ${p.name}`}
+                          />
+                        </td>
+                      ))}
+                    </tr>
+                  ) : null}
+                  {visible("usage", "Phone numbers") ? (
+                    <tr className={tr}>
+                      <td className={td}>
+                        <div className="flex items-center gap-1.5">
+                          <span className="font-bold text-text-2">Phone numbers</span>
+                          <Badge>Limit</Badge>
+                        </div>
                         <div className="text-[12px] text-subtle">Forwarding numbers per account.</div>
                       </td>
                       {sortedPlans.map((p) => (
                         <td key={p.id} className={`${td} text-center`}>
-                          <input
-                            inputMode="numeric"
-                            className={`${inputClass} mx-auto max-w-[110px] text-right`}
+                          <LimitCell
                             value={strVal(p, "includedPhoneNumbers")}
-                            aria-invalid={planFieldErrors(p).includedPhoneNumbers || undefined}
-                            aria-label={`Included phone numbers for ${p.name}`}
-                            onChange={(e) => setField(p.id, "includedPhoneNumbers", e.target.value)}
+                            unit="#"
+                            invalid={planFieldErrors(p).includedPhoneNumbers}
+                            unlimited={isUnlimited(numVal(p, "includedPhoneNumbers"))}
+                            onChange={(v) => setField(p.id, "includedPhoneNumbers", v)}
+                            onToggleUnlimited={(v) => setUnlimited(p, "includedPhoneNumbers", v)}
+                            ariaLabel={`Phone numbers for ${p.name}`}
                           />
                         </td>
                       ))}
                     </tr>
                   ) : null}
 
-                  {groupHasRows("overage") ? (
-                    <tr>
-                      <td colSpan={1 + list.length} className="bg-surface px-3 py-2 text-[12.5px] font-extrabold text-text-2">
-                        Overage
-                      </td>
-                    </tr>
-                  ) : null}
+                  {groupHasRows("overage") ? groupHeaderRow("Overage", overageToggles) : null}
                   {visible("overage", "Enable overage") ? (
                     <tr className={tr}>
                       <td className={td}>
@@ -639,12 +892,10 @@ export function PlansView() {
                       </td>
                       {sortedPlans.map((p) => (
                         <td key={p.id} className={`${td} text-center`}>
-                          <input
-                            type="checkbox"
-                            className="size-4 accent-brand"
+                          <ToggleSwitch
                             checked={boolVal(p, "overageEnabled")}
-                            aria-label={`Enable overage for ${p.name}`}
-                            onChange={(e) => setField(p.id, "overageEnabled", e.target.checked)}
+                            label={`Enable overage for ${p.name}`}
+                            onChange={(v) => setField(p.id, "overageEnabled", v)}
                           />
                         </td>
                       ))}
@@ -694,27 +945,19 @@ export function PlansView() {
                     </tr>
                   ) : null}
 
-                  {groupHasRows("signup") ? (
-                    <tr>
-                      <td colSpan={1 + list.length} className="bg-surface px-3 py-2 text-[12.5px] font-extrabold text-text-2">
-                        Signup
-                      </td>
-                    </tr>
-                  ) : null}
-                  {visible("signup", "Offered on signup") ? (
+                  {groupHasRows("signup") ? groupHeaderRow("Signup", signupToggles) : null}
+                  {visible("signup", "Show in signup") ? (
                     <tr className={tr}>
                       <td className={td}>
-                        <div className="font-bold text-text-2">Offered on signup</div>
+                        <div className="font-bold text-text-2">Show in signup</div>
                         <div className="text-[12px] text-subtle">Plan appears on the pricing step of signup.</div>
                       </td>
                       {sortedPlans.map((p) => (
                         <td key={p.id} className={`${td} text-center`}>
-                          <input
-                            type="checkbox"
-                            className="size-4 accent-brand"
+                          <ToggleSwitch
                             checked={boolVal(p, "isPublic")}
-                            aria-label={`Offered on signup for ${p.name}`}
-                            onChange={(e) => setField(p.id, "isPublic", e.target.checked)}
+                            label={`Show in signup for ${p.name}`}
+                            onChange={(v) => setField(p.id, "isPublic", v)}
                           />
                         </td>
                       ))}
@@ -728,12 +971,10 @@ export function PlansView() {
                       </td>
                       {sortedPlans.map((p) => (
                         <td key={p.id} className={`${td} text-center`}>
-                          <input
-                            type="checkbox"
-                            className="size-4 accent-brand"
+                          <ToggleSwitch
                             checked={boolVal(p, "highlight")}
-                            aria-label={`Highlight ${p.name}`}
-                            onChange={(e) => setHighlight(p.id, e.target.checked)}
+                            label={`Highlight ${p.name}`}
+                            onChange={(v) => setHighlight(p.id, v)}
                           />
                         </td>
                       ))}
@@ -769,8 +1010,13 @@ export function PlansView() {
 
       <Drawer
         open={trialSidebarOpen}
-        title="Trial settings"
-        subtitle="Free minutes and phone numbers are set in the plan table."
+        title={
+          <>
+            <div className="text-[11px] font-bold uppercase tracking-[.08em] text-faint">Free Trial</div>
+            <div>Trial settings</div>
+          </>
+        }
+        subtitle="Unlike the other plans, the trial has no row in the table above — its length, minutes and numbers are all set here."
         onClose={() => setTrialSidebarOpen(false)}
         footer={
           <>
@@ -855,7 +1101,7 @@ function TrialSidebarFields({ values, onChange }: { values: TrialFormValues; onC
         />
       </Card>
 
-      <Card title="Duration & usage limits" bodyClassName="grid gap-3 p-4 sm:grid-cols-2">
+      <Card title="Duration & usage" bodyClassName="grid gap-3 p-4 sm:grid-cols-2">
         {numberField("durationDays", "Trial length", "Days from signup.", "days")}
         {numberField("includedMinutes", "Free minutes", "AI call answering included.", "min")}
         {numberField("maxPhoneNumbers", "Phone numbers", "Ringgy numbers a trial can get.", "max")}
@@ -958,12 +1204,13 @@ function PlanForm({
   const priceCents = plan?.priceCents ?? 0;
   const includedMinutes = plan?.includedMinutes ?? 0;
   const overageCpm = plan?.overageCentsPerMin ?? 0;
+  const unlimitedMinutes = includedMinutes >= UNLIMITED_INCLUDED;
   const econ =
     internalCpm !== null
       ? {
-          includedCost: Math.round(includedMinutes * internalCpm),
-          marginFull: priceCents - Math.round(includedMinutes * internalCpm),
-          perIncludedMin: includedMinutes > 0 ? priceCents / includedMinutes : null,
+          includedCost: unlimitedMinutes ? null : Math.round(includedMinutes * internalCpm),
+          marginFull: unlimitedMinutes ? null : priceCents - Math.round(includedMinutes * internalCpm),
+          perIncludedMin: !unlimitedMinutes && includedMinutes > 0 ? priceCents / includedMinutes : null,
           overageMargin: addRates(overageCpm, -internalCpm),
         }
       : null;
@@ -980,6 +1227,7 @@ function PlanForm({
             priceCents: 0,
             includedMinutes: 0,
             includedPhoneNumbers: 1,
+            includedSms: 0,
             overageCentsPerMin: 0,
             overageEnabled: true,
             usageWarningPercent: 90,
@@ -996,6 +1244,7 @@ function PlanForm({
             priceCents: plan.priceCents,
             includedMinutes: plan.includedMinutes,
             includedPhoneNumbers: plan.includedPhoneNumbers,
+            includedSms: plan.includedSms,
             overageCentsPerMin: plan.overageCentsPerMin,
             overageEnabled: plan.overageEnabled,
             usageWarningPercent: plan.usageWarningPercent,
@@ -1100,12 +1349,19 @@ function PlanForm({
           <dl className="grid grid-cols-2 gap-x-4 gap-y-1.5 text-[13px] tabular-nums sm:grid-cols-4">
             <div>
               <dt className="text-[11.5px] text-subtle">Included minutes cost</dt>
-              <dd className="font-medium">{formatCents(econ.includedCost)}</dd>
+              <dd className="font-medium">{unlimitedMinutes ? "Unlimited" : formatCents(econ.includedCost)}</dd>
             </div>
             <div>
               <dt className="text-[11.5px] text-subtle">Margin at full use</dt>
-              <dd className={`font-medium ${econ.marginFull < 0 ? "text-red-600" : ""}`}>
-                {formatCents(econ.marginFull)} <span className="text-[11.5px] text-subtle">{formatPercent(marginPercent(econ.marginFull, priceCents))}</span>
+              <dd className={`font-medium ${econ.marginFull !== null && econ.marginFull < 0 ? "text-red-600" : ""}`}>
+                {unlimitedMinutes || econ.marginFull === null ? (
+                  "—"
+                ) : (
+                  <>
+                    {formatCents(econ.marginFull)}{" "}
+                    <span className="text-[11.5px] text-subtle">{formatPercent(marginPercent(econ.marginFull, priceCents))}</span>
+                  </>
+                )}
               </dd>
             </div>
             <div>
