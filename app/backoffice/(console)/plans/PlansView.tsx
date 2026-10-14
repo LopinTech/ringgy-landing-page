@@ -268,10 +268,13 @@ export function PlansView() {
   const draftFor = (id: string): PlanDraft => planDrafts[id] ?? {};
   const priceVal = (p: AdminPlan) => draftFor(p.id).price ?? centsToDollarInput(p.priceCents);
   const overageVal = (p: AdminPlan) => draftFor(p.id).overage ?? rateToDollarInput(p.overageCentsPerMin);
+  // `p[key] ?? 0` guards against an older backend that doesn't know this
+  // field yet (e.g. includedSms before its migration is deployed) and would
+  // otherwise send `undefined`, rendering the literal text "undefined".
   const strVal = (p: AdminPlan, key: "includedMinutes" | "includedPhoneNumbers" | "includedSms" | "usageWarningPercent") =>
-    draftFor(p.id)[key] ?? String(p[key]);
+    draftFor(p.id)[key] ?? String(p[key] ?? 0);
   const numVal = (p: AdminPlan, key: "includedMinutes" | "includedPhoneNumbers" | "includedSms") =>
-    intOrNull(strVal(p, key), 0) ?? p[key];
+    intOrNull(strVal(p, key), 0) ?? p[key] ?? 0;
   const setUnlimited = (p: AdminPlan, key: "includedMinutes" | "includedPhoneNumbers" | "includedSms", unlimited: boolean) =>
     setField(p.id, key, unlimited ? String(UNLIMITED_INCLUDED) : "0");
   const boolVal = (p: AdminPlan, key: "overageEnabled" | "isPublic" | "highlight") => {
@@ -317,7 +320,7 @@ export function PlansView() {
       priceVal(p) !== centsToDollarInput(p.priceCents) ||
       strVal(p, "includedMinutes") !== String(p.includedMinutes) ||
       strVal(p, "includedPhoneNumbers") !== String(p.includedPhoneNumbers) ||
-      strVal(p, "includedSms") !== String(p.includedSms) ||
+      strVal(p, "includedSms") !== String(p.includedSms ?? 0) ||
       overageVal(p) !== rateToDollarInput(p.overageCentsPerMin) ||
       boolVal(p, "overageEnabled") !== p.overageEnabled ||
       strVal(p, "usageWarningPercent") !== String(p.usageWarningPercent) ||
@@ -538,11 +541,11 @@ export function PlansView() {
   function groupHeaderRow(label: string, toggles: { get: (p: AdminPlan) => boolean; set: (p: AdminPlan, v: boolean) => void }[]) {
     return (
       <tr>
-        <td className="bg-surface px-3 py-2 text-[12.5px] font-extrabold text-text-2">{label}</td>
+        <td className="bg-tint-2 px-3 py-2.5 text-[15px] font-extrabold text-ink">{label}</td>
         {sortedPlans.map((p) => {
           const bulk = groupBulkInfo(p, toggles);
           return (
-            <td key={p.id} className="bg-surface px-2 py-2 text-center">
+            <td key={p.id} className="bg-tint-2 px-2 py-2.5 text-center">
               {bulk ? (
                 <button type="button" onClick={bulk.onClick} className="text-[12px] font-bold text-brand hover:underline">
                   {bulk.label}
