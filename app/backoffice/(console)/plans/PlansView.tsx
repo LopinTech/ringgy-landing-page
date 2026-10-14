@@ -133,14 +133,38 @@ type PlanDraft = {
   usageWarningPercent?: string;
   isPublic?: boolean;
   highlight?: boolean;
+  features?: string[];
 };
 
-type GroupKey = "usage" | "overage" | "signup";
+type GroupKey = "calls" | "messaging" | "integrations" | "usage" | "overage" | "signup";
 const GROUPS: { key: GroupKey; label: string }[] = [
+  { key: "calls", label: "Calls" },
+  { key: "messaging", label: "Messaging" },
+  { key: "integrations", label: "Integrations" },
   { key: "usage", label: "Usage limits" },
   { key: "overage", label: "Overage" },
   { key: "signup", label: "Signup" },
 ];
+
+/**
+ * These toggles edit the plan's existing freeform marketing "features" list
+ * (the same field the plan drawer already edits) — each one just adds or
+ * removes its exact label from that list. They are copy shown on the
+ * pricing/signup page, not real functional gates: Ringgy has no per-plan
+ * enforcement for call recording, SMS, missed-call text-back or Google
+ * Calendar today (Calendar works the same for every tenant regardless of
+ * plan). Toggling one here does not turn the underlying feature on or off.
+ */
+const CALLS_FEATURES = [
+  { label: "Call transcripts", desc: "Full transcript for every call in the dashboard." },
+  { label: "Call recordings", desc: "Audio playback and download." },
+];
+const MESSAGING_FEATURES = [
+  { label: "SMS confirmations", desc: "Text the caller after booking." },
+  { label: "Missed-call text back", desc: "Auto-text callers who hang up early." },
+];
+const INTEGRATIONS_FEATURES = [{ label: "Google Calendar integration", desc: "Copy bookings to a Google Calendar." }];
+const ALL_TOGGLE_FEATURES = [...CALLS_FEATURES, ...MESSAGING_FEATURES, ...INTEGRATIONS_FEATURES];
 
 export function PlansView() {
   const plans = useApi<AdminPlan[]>("/admin/plans");
@@ -178,9 +202,31 @@ export function PlansView() {
     const d = draftFor(p.id)[key];
     return d !== undefined ? d : p[key];
   };
+  const featuresVal = (p: AdminPlan) => draftFor(p.id).features ?? p.features;
+  const hasFeature = (p: AdminPlan, label: string) => featuresVal(p).includes(label);
 
   const setField = <K extends keyof PlanDraft>(id: string, key: K, value: PlanDraft[K]) =>
     setPlanDrafts((prev) => ({ ...prev, [id]: { ...prev[id], [key]: value } }));
+
+  const setFeatureState = (p: AdminPlan, label: string, on: boolean) => {
+    const current = featuresVal(p);
+    const next = on ? (current.includes(label) ? current : [...current, label]) : current.filter((f) => f !== label);
+    setField(p.id, "features", next);
+  };
+  const toggleFeature = (p: AdminPlan, label: string) => setFeatureState(p, label, !hasFeature(p, label));
+
+  /** Group-header "Turn all on/off" — null when the group has no bulk-eligible toggle. */
+  function groupBulkInfo(p: AdminPlan, toggles: { get: (p: AdminPlan) => boolean; set: (p: AdminPlan, v: boolean) => void }[]) {
+    if (toggles.length === 0) return null;
+    const allOn = toggles.every((t) => t.get(p));
+    return { label: allOn ? "Turn all off" : "Turn all on", onClick: () => toggles.forEach((t) => t.set(p, !allOn)) };
+  }
+  const callsToggles = CALLS_FEATURES.map((f) => ({ get: (p: AdminPlan) => hasFeature(p, f.label), set: (p: AdminPlan, v: boolean) => setFeatureState(p, f.label, v) }));
+  const messagingToggles = MESSAGING_FEATURES.map((f) => ({ get: (p: AdminPlan) => hasFeature(p, f.label), set: (p: AdminPlan, v: boolean) => setFeatureState(p, f.label, v) }));
+  const integrationsToggles = INTEGRATIONS_FEATURES.map((f) => ({ get: (p: AdminPlan) => hasFeature(p, f.label), set: (p: AdminPlan, v: boolean) => setFeatureState(p, f.label, v) }));
+  const overageToggles = [{ get: (p: AdminPlan) => boolVal(p, "overageEnabled"), set: (p: AdminPlan, v: boolean) => setField(p.id, "overageEnabled", v) }];
+  // Highlight is exclusive, so it's left out of the bulk action (matches the mock).
+  const signupToggles = [{ get: (p: AdminPlan) => boolVal(p, "isPublic"), set: (p: AdminPlan, v: boolean) => setField(p.id, "isPublic", v) }];
 
   /** Highlight is exclusive: turning it on for one plan turns it off for the rest. */
   const setHighlight = (id: string, value: boolean) =>
@@ -199,7 +245,8 @@ export function PlansView() {
       boolVal(p, "overageEnabled") !== p.overageEnabled ||
       strVal(p, "usageWarningPercent") !== String(p.usageWarningPercent) ||
       boolVal(p, "isPublic") !== p.isPublic ||
-      boolVal(p, "highlight") !== p.highlight
+      boolVal(p, "highlight") !== p.highlight ||
+      JSON.stringify(featuresVal(p)) !== JSON.stringify(p.features)
     );
   }
 
@@ -226,6 +273,7 @@ export function PlansView() {
       usageWarningPercent: intOrNull(strVal(p, "usageWarningPercent"), 1, 100) ?? p.usageWarningPercent,
       isPublic: boolVal(p, "isPublic"),
       highlight: boolVal(p, "highlight"),
+      features: featuresVal(p),
     };
   }
 
@@ -394,11 +442,38 @@ export function PlansView() {
     return !q || label.toLowerCase().includes(q);
   };
   const groupHasRows = (group: GroupKey) =>
-    group === "usage"
-      ? visible("usage", "Included minutes") || visible("usage", "Included phone numbers")
-      : group === "overage"
-        ? visible("overage", "Enable overage") || visible("overage", "Overage price") || visible("overage", "Usage warning at")
-        : visible("signup", "Offered on signup") || visible("signup", "Highlight");
+    group === "calls"
+      ? CALLS_FEATURES.some((f) => visible("calls", f.label))
+      : group === "messaging"
+        ? MESSAGING_FEATURES.some((f) => visible("messaging", f.label))
+        : group === "integrations"
+          ? INTEGRATIONS_FEATURES.some((f) => visible("integrations", f.label))
+          : group === "usage"
+            ? visible("usage", "Included minutes") || visible("usage", "Included phone numbers")
+            : group === "overage"
+              ? visible("overage", "Enable overage") || visible("overage", "Overage price") || visible("overage", "Usage warning at")
+              : visible("signup", "Offered on signup") || visible("signup", "Highlight");
+
+  /** A group header row: the group name, plus a "Turn all on/off" link per plan column. */
+  function groupHeaderRow(label: string, toggles: { get: (p: AdminPlan) => boolean; set: (p: AdminPlan, v: boolean) => void }[]) {
+    return (
+      <tr>
+        <td className="bg-surface px-3 py-2 text-[12.5px] font-extrabold text-text-2">{label}</td>
+        {sortedPlans.map((p) => {
+          const bulk = groupBulkInfo(p, toggles);
+          return (
+            <td key={p.id} className="bg-surface px-2 py-2 text-center">
+              {bulk ? (
+                <button type="button" onClick={bulk.onClick} className="text-[12px] font-bold text-brand hover:underline">
+                  {bulk.label}
+                </button>
+              ) : null}
+            </td>
+          );
+        })}
+      </tr>
+    );
+  }
 
   function afterFormSaved(result: WithStripeError<AdminPlan>, verb: string) {
     setEditingPlan(null);
@@ -422,7 +497,7 @@ export function PlansView() {
     <>
       <PageHeader
         title="Plans & permissions"
-        description="Manage plan pricing, usage limits, and the free-trial policy new signups get."
+        description="Choose which features each plan includes and set usage limits."
         actions={
           <Button variant="primary" icon={<Plus size={15} aria-hidden />} onClick={() => setEditingPlan("new")}>
             New plan
@@ -434,7 +509,7 @@ export function PlansView() {
         <input
           value={query}
           onChange={(e) => setQuery(e.target.value)}
-          placeholder="Search settings"
+          placeholder="Search features"
           className={`${inputBase} h-10 w-full max-w-xs pl-3`}
         />
       </div>
@@ -481,6 +556,7 @@ export function PlansView() {
                   const color = PALETTE[i % PALETTE.length];
                   const highlighted = boolVal(p, "highlight");
                   const hidden = !boolVal(p, "isPublic");
+                  const enabledFeatures = ALL_TOGGLE_FEATURES.filter((f) => hasFeature(p, f.label)).length;
                   return (
                     <Card key={p.id} bodyClassName="p-4 space-y-3" className={planDirty(p) ? "border-amber-300" : ""}>
                       <div className="flex items-center gap-2">
@@ -503,7 +579,7 @@ export function PlansView() {
                       </div>
                       <MoneyInput value={priceVal(p)} onChange={(v) => setField(p.id, "price", v)} suffix="/mo" invalid={planFieldErrors(p).price} />
                       <div className="text-[12.5px] text-subtle">
-                        {formatInt(p.includedMinutes)} min · {p.includedPhoneNumbers} number{p.includedPhoneNumbers === 1 ? "" : "s"}/mo
+                        {enabledFeatures} of {ALL_TOGGLE_FEATURES.length} features · {formatInt(p.includedMinutes)} min
                       </div>
                     </Card>
                   );
@@ -576,13 +652,76 @@ export function PlansView() {
                   </tr>
                 </thead>
                 <tbody>
-                  {groupHasRows("usage") ? (
-                    <tr>
-                      <td colSpan={1 + list.length} className="bg-surface px-3 py-2 text-[12.5px] font-extrabold text-text-2">
-                        Usage limits
-                      </td>
-                    </tr>
-                  ) : null}
+                  {groupHasRows("calls") ? groupHeaderRow("Calls", callsToggles) : null}
+                  {CALLS_FEATURES.map((f) =>
+                    visible("calls", f.label) ? (
+                      <tr key={f.label} className={tr}>
+                        <td className={td}>
+                          <div className="font-bold text-text-2">{f.label}</div>
+                          <div className="text-[12px] text-subtle">{f.desc}</div>
+                        </td>
+                        {sortedPlans.map((p) => (
+                          <td key={p.id} className={`${td} text-center`}>
+                            <input
+                              type="checkbox"
+                              className="size-4 accent-brand"
+                              checked={hasFeature(p, f.label)}
+                              aria-label={`${f.label} for ${p.name}`}
+                              onChange={() => toggleFeature(p, f.label)}
+                            />
+                          </td>
+                        ))}
+                      </tr>
+                    ) : null,
+                  )}
+
+                  {groupHasRows("messaging") ? groupHeaderRow("Messaging", messagingToggles) : null}
+                  {MESSAGING_FEATURES.map((f) =>
+                    visible("messaging", f.label) ? (
+                      <tr key={f.label} className={tr}>
+                        <td className={td}>
+                          <div className="font-bold text-text-2">{f.label}</div>
+                          <div className="text-[12px] text-subtle">{f.desc}</div>
+                        </td>
+                        {sortedPlans.map((p) => (
+                          <td key={p.id} className={`${td} text-center`}>
+                            <input
+                              type="checkbox"
+                              className="size-4 accent-brand"
+                              checked={hasFeature(p, f.label)}
+                              aria-label={`${f.label} for ${p.name}`}
+                              onChange={() => toggleFeature(p, f.label)}
+                            />
+                          </td>
+                        ))}
+                      </tr>
+                    ) : null,
+                  )}
+
+                  {groupHasRows("integrations") ? groupHeaderRow("Integrations", integrationsToggles) : null}
+                  {INTEGRATIONS_FEATURES.map((f) =>
+                    visible("integrations", f.label) ? (
+                      <tr key={f.label} className={tr}>
+                        <td className={td}>
+                          <div className="font-bold text-text-2">{f.label}</div>
+                          <div className="text-[12px] text-subtle">{f.desc}</div>
+                        </td>
+                        {sortedPlans.map((p) => (
+                          <td key={p.id} className={`${td} text-center`}>
+                            <input
+                              type="checkbox"
+                              className="size-4 accent-brand"
+                              checked={hasFeature(p, f.label)}
+                              aria-label={`${f.label} for ${p.name}`}
+                              onChange={() => toggleFeature(p, f.label)}
+                            />
+                          </td>
+                        ))}
+                      </tr>
+                    ) : null,
+                  )}
+
+                  {groupHasRows("usage") ? groupHeaderRow("Usage limits", []) : null}
                   {visible("usage", "Included minutes") ? (
                     <tr className={tr}>
                       <td className={td}>
@@ -624,13 +763,7 @@ export function PlansView() {
                     </tr>
                   ) : null}
 
-                  {groupHasRows("overage") ? (
-                    <tr>
-                      <td colSpan={1 + list.length} className="bg-surface px-3 py-2 text-[12.5px] font-extrabold text-text-2">
-                        Overage
-                      </td>
-                    </tr>
-                  ) : null}
+                  {groupHasRows("overage") ? groupHeaderRow("Overage", overageToggles) : null}
                   {visible("overage", "Enable overage") ? (
                     <tr className={tr}>
                       <td className={td}>
@@ -694,13 +827,7 @@ export function PlansView() {
                     </tr>
                   ) : null}
 
-                  {groupHasRows("signup") ? (
-                    <tr>
-                      <td colSpan={1 + list.length} className="bg-surface px-3 py-2 text-[12.5px] font-extrabold text-text-2">
-                        Signup
-                      </td>
-                    </tr>
-                  ) : null}
+                  {groupHasRows("signup") ? groupHeaderRow("Signup", signupToggles) : null}
                   {visible("signup", "Offered on signup") ? (
                     <tr className={tr}>
                       <td className={td}>
