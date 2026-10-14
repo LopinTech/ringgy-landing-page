@@ -541,11 +541,11 @@ export function PlansView() {
   function groupHeaderRow(label: string, toggles: { get: (p: AdminPlan) => boolean; set: (p: AdminPlan, v: boolean) => void }[]) {
     return (
       <tr>
-        <td className="bg-surface px-3 py-2 text-[12.5px] font-extrabold text-text-2">{label}</td>
+        <td className="bg-tint-2 px-3 py-2.5 text-[15px] font-extrabold text-ink">{label}</td>
         {sortedPlans.map((p) => {
           const bulk = groupBulkInfo(p, toggles);
           return (
-            <td key={p.id} className="bg-surface px-2 py-2 text-center">
+            <td key={p.id} className="bg-tint-2 px-2 py-2.5 text-center">
               {bulk ? (
                 <button type="button" onClick={bulk.onClick} className="text-[12px] font-bold text-brand hover:underline">
                   {bulk.label}
