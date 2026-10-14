@@ -125,6 +125,8 @@ export type ReportRow = {
 
 export type Overview = {
   tenants: number;
+  /** Tenants currently on an active (or grace-period) free trial. */
+  trialTenants: number;
   liveSubscriptions: number;
   planMix: { planId: string; name: string; count: number }[];
   mrrCents: { plans: number; phoneNumbers: number; addOns: number; total: number };
@@ -161,9 +163,10 @@ export type PricingInput = {
 
 export type PlanEconomics = {
   internalCentsPerMin: number;
-  includedMinutesCostCents: number;
-  marginAtFullUseCents: number;
-  effectiveCentsPerIncludedMin: number;
+  /** Null for an "unlimited" plan (no worst-case full-use cost to show). */
+  includedMinutesCostCents: number | null;
+  marginAtFullUseCents: number | null;
+  effectiveCentsPerIncludedMin: number | null;
   overageMarginCentsPerMin: number;
 };
 
@@ -175,6 +178,7 @@ export type AdminPlan = {
   priceCents: number;
   includedMinutes: number;
   includedPhoneNumbers: number;
+  includedSms: number;
   overageCentsPerMin: number;
   overageEnabled: boolean;
   usageWarningPercent: number;
@@ -200,6 +204,7 @@ export type PlanInput = {
   priceCents: number;
   includedMinutes: number;
   includedPhoneNumbers: number;
+  includedSms: number;
   overageCentsPerMin: number;
   overageEnabled: boolean;
   usageWarningPercent: number;

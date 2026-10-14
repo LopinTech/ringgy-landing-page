@@ -5,10 +5,23 @@ import { AlertTriangle, CheckCircle2, Info, Loader2, RefreshCw, X, XCircle } fro
 
 // ---- layout ------------------------------------------------------------------
 
-export function PageHeader({ title, description, actions }: { title: string; description?: ReactNode; actions?: ReactNode }) {
+export function PageHeader({
+  eyebrow,
+  title,
+  description,
+  actions,
+}: {
+  eyebrow?: string;
+  title: string;
+  description?: ReactNode;
+  actions?: ReactNode;
+}) {
   return (
     <div className="mb-5 flex flex-wrap items-end justify-between gap-3">
       <div className="min-w-0">
+        {eyebrow ? (
+          <div className="text-[12px] font-bold uppercase tracking-[.08em] text-faint">{eyebrow}</div>
+        ) : null}
         <h1 className="text-[22px] font-bold tracking-[-.01em] text-ink">{title}</h1>
         {description ? <p className="mt-1 max-w-3xl text-[13.5px] text-muted">{description}</p> : null}
       </div>

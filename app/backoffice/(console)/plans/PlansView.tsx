@@ -29,6 +29,7 @@ import {
   type AdminAddOn,
   type AdminPlan,
   type PlanInput,
+  type Overview,
   type PricingResponse,
   type TrialPolicy,
   type TrialPolicyInput,
@@ -51,6 +52,16 @@ import {
 /** A stable, purely cosmetic color per plan card / table column. */
 const PALETTE = ["#2F6BFF", "#0E7C66", "#6B4BFF", "#E0562F", "#9A6B2F"];
 const TRIAL_COLOR = "#9AA2B4";
+
+/**
+ * The "Unlimited" checkbox on a limit field stores this sentinel rather
+ * than null, so it never touches the real usage/billing math elsewhere
+ * (which assumes a finite included amount — null there would coerce to 0 in
+ * arithmetic, the opposite of unlimited). Must match UNLIMITED_INCLUDED in
+ * ringgy-backend's admin-catalog.service.ts.
+ */
+const UNLIMITED_INCLUDED = 999_999;
+const isUnlimited = (n: number) => n >= UNLIMITED_INCLUDED;
 
 function intOrNull(s: string, min: number, max = Number.MAX_SAFE_INTEGER): number | null {
   const t = s.trim();
@@ -128,6 +139,7 @@ type PlanDraft = {
   price?: string;
   includedMinutes?: string;
   includedPhoneNumbers?: string;
+  includedSms?: string;
   overage?: string;
   overageEnabled?: boolean;
   usageWarningPercent?: string;
@@ -166,11 +178,71 @@ const MESSAGING_FEATURES = [
 const INTEGRATIONS_FEATURES = [{ label: "Google Calendar integration", desc: "Copy bookings to a Google Calendar." }];
 const ALL_TOGGLE_FEATURES = [...CALLS_FEATURES, ...MESSAGING_FEATURES, ...INTEGRATIONS_FEATURES];
 
+/** A usage-limit cell: a number input plus its own "Unlimited" checkbox. */
+function LimitCell({
+  value,
+  unit,
+  invalid,
+  unlimited,
+  onChange,
+  onToggleUnlimited,
+  ariaLabel,
+}: {
+  value: string;
+  unit: string;
+  invalid: boolean;
+  unlimited: boolean;
+  onChange: (v: string) => void;
+  onToggleUnlimited: (v: boolean) => void;
+  ariaLabel: string;
+}) {
+  return (
+    <div className="mx-auto flex max-w-[130px] flex-col items-center gap-1.5">
+      <div className="relative w-full">
+        <input
+          inputMode="numeric"
+          className={`${inputClass} pr-9 text-right`}
+          value={unlimited ? "" : value}
+          placeholder={unlimited ? "Unlimited" : undefined}
+          disabled={unlimited}
+          aria-invalid={invalid || undefined}
+          aria-label={ariaLabel}
+          onChange={(e) => onChange(e.target.value)}
+        />
+        <span className="pointer-events-none absolute inset-y-0 right-2 flex items-center text-[11.5px] text-subtle">{unit}</span>
+      </div>
+      <label className="flex items-center gap-1.5 text-[11.5px] font-medium text-text-2">
+        <input type="checkbox" className="size-3.5 accent-brand" checked={unlimited} onChange={(e) => onToggleUnlimited(e.target.checked)} />
+        Unlimited
+      </label>
+    </div>
+  );
+}
+
+/** The pill-style on/off switch used throughout the settings grid. */
+function ToggleSwitch({ checked, onChange, label }: { checked: boolean; onChange: (v: boolean) => void; label: string }) {
+  return (
+    <button
+      type="button"
+      role="switch"
+      aria-checked={checked}
+      aria-label={label}
+      onClick={() => onChange(!checked)}
+      className={`relative h-[26px] w-11 flex-none rounded-full transition-colors ${checked ? "bg-brand" : "bg-[#D5DAE4]"}`}
+    >
+      <span
+        className={`absolute top-[3px] size-5 rounded-full bg-white shadow transition-[left] ${checked ? "left-[21px]" : "left-[3px]"}`}
+      />
+    </button>
+  );
+}
+
 export function PlansView() {
   const plans = useApi<AdminPlan[]>("/admin/plans");
   const addOns = useApi<AdminAddOn[]>("/admin/add-ons");
   const trialPolicy = useApi<TrialPolicyResponse>("/admin/trial-policy");
   const pricing = useApi<PricingResponse>("/admin/pricing");
+  const overview = useApi<Overview>("/admin/overview");
   const internalCpm = pricing.data?.current?.internalCentsPerMin ?? null;
 
   const [flash, setFlash] = useState<Flash | null>(null);
@@ -196,8 +268,12 @@ export function PlansView() {
   const draftFor = (id: string): PlanDraft => planDrafts[id] ?? {};
   const priceVal = (p: AdminPlan) => draftFor(p.id).price ?? centsToDollarInput(p.priceCents);
   const overageVal = (p: AdminPlan) => draftFor(p.id).overage ?? rateToDollarInput(p.overageCentsPerMin);
-  const strVal = (p: AdminPlan, key: "includedMinutes" | "includedPhoneNumbers" | "usageWarningPercent") =>
+  const strVal = (p: AdminPlan, key: "includedMinutes" | "includedPhoneNumbers" | "includedSms" | "usageWarningPercent") =>
     draftFor(p.id)[key] ?? String(p[key]);
+  const numVal = (p: AdminPlan, key: "includedMinutes" | "includedPhoneNumbers" | "includedSms") =>
+    intOrNull(strVal(p, key), 0) ?? p[key];
+  const setUnlimited = (p: AdminPlan, key: "includedMinutes" | "includedPhoneNumbers" | "includedSms", unlimited: boolean) =>
+    setField(p.id, key, unlimited ? String(UNLIMITED_INCLUDED) : "0");
   const boolVal = (p: AdminPlan, key: "overageEnabled" | "isPublic" | "highlight") => {
     const d = draftFor(p.id)[key];
     return d !== undefined ? d : p[key];
@@ -241,6 +317,7 @@ export function PlansView() {
       priceVal(p) !== centsToDollarInput(p.priceCents) ||
       strVal(p, "includedMinutes") !== String(p.includedMinutes) ||
       strVal(p, "includedPhoneNumbers") !== String(p.includedPhoneNumbers) ||
+      strVal(p, "includedSms") !== String(p.includedSms) ||
       overageVal(p) !== rateToDollarInput(p.overageCentsPerMin) ||
       boolVal(p, "overageEnabled") !== p.overageEnabled ||
       strVal(p, "usageWarningPercent") !== String(p.usageWarningPercent) ||
@@ -253,8 +330,9 @@ export function PlansView() {
   function planFieldErrors(p: AdminPlan) {
     return {
       price: dollarInputToCents(priceVal(p)) === null,
-      includedMinutes: intOrNull(strVal(p, "includedMinutes"), 0) === null,
-      includedPhoneNumbers: intOrNull(strVal(p, "includedPhoneNumbers"), 0, 100) === null,
+      includedMinutes: intOrNull(strVal(p, "includedMinutes"), 0, UNLIMITED_INCLUDED) === null,
+      includedPhoneNumbers: intOrNull(strVal(p, "includedPhoneNumbers"), 0, UNLIMITED_INCLUDED) === null,
+      includedSms: intOrNull(strVal(p, "includedSms"), 0, UNLIMITED_INCLUDED) === null,
       overage: dollarRateInputToCentsPerMin(overageVal(p)) === null,
       usageWarningPercent: intOrNull(strVal(p, "usageWarningPercent"), 1, 100) === null,
     };
@@ -266,8 +344,9 @@ export function PlansView() {
     return {
       ...p,
       priceCents: dollarInputToCents(priceVal(p)) ?? p.priceCents,
-      includedMinutes: intOrNull(strVal(p, "includedMinutes"), 0) ?? p.includedMinutes,
-      includedPhoneNumbers: intOrNull(strVal(p, "includedPhoneNumbers"), 0, 100) ?? p.includedPhoneNumbers,
+      includedMinutes: intOrNull(strVal(p, "includedMinutes"), 0, UNLIMITED_INCLUDED) ?? p.includedMinutes,
+      includedPhoneNumbers: intOrNull(strVal(p, "includedPhoneNumbers"), 0, UNLIMITED_INCLUDED) ?? p.includedPhoneNumbers,
+      includedSms: intOrNull(strVal(p, "includedSms"), 0, UNLIMITED_INCLUDED) ?? p.includedSms,
       overageCentsPerMin: dollarRateInputToCentsPerMin(overageVal(p)) ?? p.overageCentsPerMin,
       overageEnabled: boolVal(p, "overageEnabled"),
       usageWarningPercent: intOrNull(strVal(p, "usageWarningPercent"), 1, 100) ?? p.usageWarningPercent,
@@ -285,6 +364,7 @@ export function PlansView() {
       priceCents: e.priceCents,
       includedMinutes: e.includedMinutes,
       includedPhoneNumbers: e.includedPhoneNumbers,
+      includedSms: e.includedSms,
       overageCentsPerMin: e.overageCentsPerMin,
       overageEnabled: e.overageEnabled,
       usageWarningPercent: e.usageWarningPercent,
@@ -449,10 +529,10 @@ export function PlansView() {
         : group === "integrations"
           ? INTEGRATIONS_FEATURES.some((f) => visible("integrations", f.label))
           : group === "usage"
-            ? visible("usage", "Included minutes") || visible("usage", "Included phone numbers")
+            ? visible("usage", "Call minutes") || visible("usage", "SMS") || visible("usage", "Phone numbers")
             : group === "overage"
               ? visible("overage", "Enable overage") || visible("overage", "Overage price") || visible("overage", "Usage warning at")
-              : visible("signup", "Offered on signup") || visible("signup", "Highlight");
+              : visible("signup", "Show in signup") || visible("signup", "Highlight");
 
   /** A group header row: the group name, plus a "Turn all on/off" link per plan column. */
   function groupHeaderRow(label: string, toggles: { get: (p: AdminPlan) => boolean; set: (p: AdminPlan, v: boolean) => void }[]) {
@@ -496,6 +576,7 @@ export function PlansView() {
   return (
     <>
       <PageHeader
+        eyebrow="Admin"
         title="Plans & permissions"
         description="Choose which features each plan includes and set usage limits."
         actions={
@@ -531,6 +612,11 @@ export function PlansView() {
                 <div className="flex items-center gap-2">
                   <span className="block size-2.5 rounded-[3px]" style={{ background: TRIAL_COLOR }} />
                   <span className="flex-1 text-[15px] font-extrabold">Free Trial</span>
+                  {overview.data ? (
+                    <span className="rounded-full bg-surface px-2 py-0.5 text-[11.5px] font-bold text-subtle">
+                      {formatInt(overview.data.trialTenants)} accounts
+                    </span>
+                  ) : null}
                   <button
                     type="button"
                     title="Trial settings"
@@ -579,7 +665,8 @@ export function PlansView() {
                       </div>
                       <MoneyInput value={priceVal(p)} onChange={(v) => setField(p.id, "price", v)} suffix="/mo" invalid={planFieldErrors(p).price} />
                       <div className="text-[12.5px] text-subtle">
-                        {enabledFeatures} of {ALL_TOGGLE_FEATURES.length} features · {formatInt(p.includedMinutes)} min
+                        {enabledFeatures} of {ALL_TOGGLE_FEATURES.length} features ·{" "}
+                        {isUnlimited(p.includedMinutes) ? "Unlimited" : `${formatInt(p.includedMinutes)} min`}
                       </div>
                     </Card>
                   );
@@ -643,10 +730,13 @@ export function PlansView() {
               <Table minWidth={320 + list.length * 170}>
                 <thead>
                   <tr>
-                    <th className={th}>Setting</th>
-                    {sortedPlans.map((p) => (
+                    <th className={th}>Feature</th>
+                    {sortedPlans.map((p, i) => (
                       <th key={p.id} className={`${th} text-center`}>
-                        {p.name}
+                        <span className="inline-flex items-center gap-1.5">
+                          <span className="block size-2 rounded-[2px]" style={{ background: PALETTE[i % PALETTE.length] }} />
+                          {p.name}
+                        </span>
                       </th>
                     ))}
                   </tr>
@@ -662,11 +752,9 @@ export function PlansView() {
                         </td>
                         {sortedPlans.map((p) => (
                           <td key={p.id} className={`${td} text-center`}>
-                            <input
-                              type="checkbox"
-                              className="size-4 accent-brand"
+                            <ToggleSwitch
                               checked={hasFeature(p, f.label)}
-                              aria-label={`${f.label} for ${p.name}`}
+                              label={`${f.label} for ${p.name}`}
                               onChange={() => toggleFeature(p, f.label)}
                             />
                           </td>
@@ -685,11 +773,9 @@ export function PlansView() {
                         </td>
                         {sortedPlans.map((p) => (
                           <td key={p.id} className={`${td} text-center`}>
-                            <input
-                              type="checkbox"
-                              className="size-4 accent-brand"
+                            <ToggleSwitch
                               checked={hasFeature(p, f.label)}
-                              aria-label={`${f.label} for ${p.name}`}
+                              label={`${f.label} for ${p.name}`}
                               onChange={() => toggleFeature(p, f.label)}
                             />
                           </td>
@@ -708,11 +794,9 @@ export function PlansView() {
                         </td>
                         {sortedPlans.map((p) => (
                           <td key={p.id} className={`${td} text-center`}>
-                            <input
-                              type="checkbox"
-                              className="size-4 accent-brand"
+                            <ToggleSwitch
                               checked={hasFeature(p, f.label)}
-                              aria-label={`${f.label} for ${p.name}`}
+                              label={`${f.label} for ${p.name}`}
                               onChange={() => toggleFeature(p, f.label)}
                             />
                           </td>
@@ -722,41 +806,73 @@ export function PlansView() {
                   )}
 
                   {groupHasRows("usage") ? groupHeaderRow("Usage limits", []) : null}
-                  {visible("usage", "Included minutes") ? (
+                  {visible("usage", "Call minutes") ? (
                     <tr className={tr}>
                       <td className={td}>
-                        <div className="font-bold text-text-2">Included minutes</div>
+                        <div className="flex items-center gap-1.5">
+                          <span className="font-bold text-text-2">Call minutes</span>
+                          <Badge>Limit</Badge>
+                        </div>
                         <div className="text-[12px] text-subtle">Included per month before overage.</div>
                       </td>
                       {sortedPlans.map((p) => (
                         <td key={p.id} className={`${td} text-center`}>
-                          <input
-                            inputMode="numeric"
-                            className={`${inputClass} mx-auto max-w-[110px] text-right`}
+                          <LimitCell
                             value={strVal(p, "includedMinutes")}
-                            aria-invalid={planFieldErrors(p).includedMinutes || undefined}
-                            aria-label={`Included minutes for ${p.name}`}
-                            onChange={(e) => setField(p.id, "includedMinutes", e.target.value)}
+                            unit="min"
+                            invalid={planFieldErrors(p).includedMinutes}
+                            unlimited={isUnlimited(numVal(p, "includedMinutes"))}
+                            onChange={(v) => setField(p.id, "includedMinutes", v)}
+                            onToggleUnlimited={(v) => setUnlimited(p, "includedMinutes", v)}
+                            ariaLabel={`Call minutes for ${p.name}`}
                           />
                         </td>
                       ))}
                     </tr>
                   ) : null}
-                  {visible("usage", "Included phone numbers") ? (
+                  {visible("usage", "SMS") ? (
                     <tr className={tr}>
                       <td className={td}>
-                        <div className="font-bold text-text-2">Included phone numbers</div>
+                        <div className="flex items-center gap-1.5">
+                          <span className="font-bold text-text-2">SMS</span>
+                          <Badge>Limit</Badge>
+                        </div>
+                        <div className="text-[12px] text-subtle">Messages included per month.</div>
+                      </td>
+                      {sortedPlans.map((p) => (
+                        <td key={p.id} className={`${td} text-center`}>
+                          <LimitCell
+                            value={strVal(p, "includedSms")}
+                            unit="sms"
+                            invalid={planFieldErrors(p).includedSms}
+                            unlimited={isUnlimited(numVal(p, "includedSms"))}
+                            onChange={(v) => setField(p.id, "includedSms", v)}
+                            onToggleUnlimited={(v) => setUnlimited(p, "includedSms", v)}
+                            ariaLabel={`SMS limit for ${p.name}`}
+                          />
+                        </td>
+                      ))}
+                    </tr>
+                  ) : null}
+                  {visible("usage", "Phone numbers") ? (
+                    <tr className={tr}>
+                      <td className={td}>
+                        <div className="flex items-center gap-1.5">
+                          <span className="font-bold text-text-2">Phone numbers</span>
+                          <Badge>Limit</Badge>
+                        </div>
                         <div className="text-[12px] text-subtle">Forwarding numbers per account.</div>
                       </td>
                       {sortedPlans.map((p) => (
                         <td key={p.id} className={`${td} text-center`}>
-                          <input
-                            inputMode="numeric"
-                            className={`${inputClass} mx-auto max-w-[110px] text-right`}
+                          <LimitCell
                             value={strVal(p, "includedPhoneNumbers")}
-                            aria-invalid={planFieldErrors(p).includedPhoneNumbers || undefined}
-                            aria-label={`Included phone numbers for ${p.name}`}
-                            onChange={(e) => setField(p.id, "includedPhoneNumbers", e.target.value)}
+                            unit="#"
+                            invalid={planFieldErrors(p).includedPhoneNumbers}
+                            unlimited={isUnlimited(numVal(p, "includedPhoneNumbers"))}
+                            onChange={(v) => setField(p.id, "includedPhoneNumbers", v)}
+                            onToggleUnlimited={(v) => setUnlimited(p, "includedPhoneNumbers", v)}
+                            ariaLabel={`Phone numbers for ${p.name}`}
                           />
                         </td>
                       ))}
@@ -772,12 +888,10 @@ export function PlansView() {
                       </td>
                       {sortedPlans.map((p) => (
                         <td key={p.id} className={`${td} text-center`}>
-                          <input
-                            type="checkbox"
-                            className="size-4 accent-brand"
+                          <ToggleSwitch
                             checked={boolVal(p, "overageEnabled")}
-                            aria-label={`Enable overage for ${p.name}`}
-                            onChange={(e) => setField(p.id, "overageEnabled", e.target.checked)}
+                            label={`Enable overage for ${p.name}`}
+                            onChange={(v) => setField(p.id, "overageEnabled", v)}
                           />
                         </td>
                       ))}
@@ -828,20 +942,18 @@ export function PlansView() {
                   ) : null}
 
                   {groupHasRows("signup") ? groupHeaderRow("Signup", signupToggles) : null}
-                  {visible("signup", "Offered on signup") ? (
+                  {visible("signup", "Show in signup") ? (
                     <tr className={tr}>
                       <td className={td}>
-                        <div className="font-bold text-text-2">Offered on signup</div>
+                        <div className="font-bold text-text-2">Show in signup</div>
                         <div className="text-[12px] text-subtle">Plan appears on the pricing step of signup.</div>
                       </td>
                       {sortedPlans.map((p) => (
                         <td key={p.id} className={`${td} text-center`}>
-                          <input
-                            type="checkbox"
-                            className="size-4 accent-brand"
+                          <ToggleSwitch
                             checked={boolVal(p, "isPublic")}
-                            aria-label={`Offered on signup for ${p.name}`}
-                            onChange={(e) => setField(p.id, "isPublic", e.target.checked)}
+                            label={`Show in signup for ${p.name}`}
+                            onChange={(v) => setField(p.id, "isPublic", v)}
                           />
                         </td>
                       ))}
@@ -855,12 +967,10 @@ export function PlansView() {
                       </td>
                       {sortedPlans.map((p) => (
                         <td key={p.id} className={`${td} text-center`}>
-                          <input
-                            type="checkbox"
-                            className="size-4 accent-brand"
+                          <ToggleSwitch
                             checked={boolVal(p, "highlight")}
-                            aria-label={`Highlight ${p.name}`}
-                            onChange={(e) => setHighlight(p.id, e.target.checked)}
+                            label={`Highlight ${p.name}`}
+                            onChange={(v) => setHighlight(p.id, v)}
                           />
                         </td>
                       ))}
@@ -896,8 +1006,13 @@ export function PlansView() {
 
       <Drawer
         open={trialSidebarOpen}
-        title="Trial settings"
-        subtitle="Free minutes and phone numbers are set in the plan table."
+        title={
+          <>
+            <div className="text-[11px] font-bold uppercase tracking-[.08em] text-faint">Free Trial</div>
+            <div>Trial settings</div>
+          </>
+        }
+        subtitle="Unlike the other plans, the trial has no row in the table above — its length, minutes and numbers are all set here."
         onClose={() => setTrialSidebarOpen(false)}
         footer={
           <>
@@ -982,7 +1097,7 @@ function TrialSidebarFields({ values, onChange }: { values: TrialFormValues; onC
         />
       </Card>
 
-      <Card title="Duration & usage limits" bodyClassName="grid gap-3 p-4 sm:grid-cols-2">
+      <Card title="Duration & usage" bodyClassName="grid gap-3 p-4 sm:grid-cols-2">
         {numberField("durationDays", "Trial length", "Days from signup.", "days")}
         {numberField("includedMinutes", "Free minutes", "AI call answering included.", "min")}
         {numberField("maxPhoneNumbers", "Phone numbers", "Ringgy numbers a trial can get.", "max")}
@@ -1085,12 +1200,13 @@ function PlanForm({
   const priceCents = plan?.priceCents ?? 0;
   const includedMinutes = plan?.includedMinutes ?? 0;
   const overageCpm = plan?.overageCentsPerMin ?? 0;
+  const unlimitedMinutes = includedMinutes >= UNLIMITED_INCLUDED;
   const econ =
     internalCpm !== null
       ? {
-          includedCost: Math.round(includedMinutes * internalCpm),
-          marginFull: priceCents - Math.round(includedMinutes * internalCpm),
-          perIncludedMin: includedMinutes > 0 ? priceCents / includedMinutes : null,
+          includedCost: unlimitedMinutes ? null : Math.round(includedMinutes * internalCpm),
+          marginFull: unlimitedMinutes ? null : priceCents - Math.round(includedMinutes * internalCpm),
+          perIncludedMin: !unlimitedMinutes && includedMinutes > 0 ? priceCents / includedMinutes : null,
           overageMargin: addRates(overageCpm, -internalCpm),
         }
       : null;
@@ -1107,6 +1223,7 @@ function PlanForm({
             priceCents: 0,
             includedMinutes: 0,
             includedPhoneNumbers: 1,
+            includedSms: 0,
             overageCentsPerMin: 0,
             overageEnabled: true,
             usageWarningPercent: 90,
@@ -1123,6 +1240,7 @@ function PlanForm({
             priceCents: plan.priceCents,
             includedMinutes: plan.includedMinutes,
             includedPhoneNumbers: plan.includedPhoneNumbers,
+            includedSms: plan.includedSms,
             overageCentsPerMin: plan.overageCentsPerMin,
             overageEnabled: plan.overageEnabled,
             usageWarningPercent: plan.usageWarningPercent,
@@ -1227,12 +1345,19 @@ function PlanForm({
           <dl className="grid grid-cols-2 gap-x-4 gap-y-1.5 text-[13px] tabular-nums sm:grid-cols-4">
             <div>
               <dt className="text-[11.5px] text-subtle">Included minutes cost</dt>
-              <dd className="font-medium">{formatCents(econ.includedCost)}</dd>
+              <dd className="font-medium">{unlimitedMinutes ? "Unlimited" : formatCents(econ.includedCost)}</dd>
             </div>
             <div>
               <dt className="text-[11.5px] text-subtle">Margin at full use</dt>
-              <dd className={`font-medium ${econ.marginFull < 0 ? "text-red-600" : ""}`}>
-                {formatCents(econ.marginFull)} <span className="text-[11.5px] text-subtle">{formatPercent(marginPercent(econ.marginFull, priceCents))}</span>
+              <dd className={`font-medium ${econ.marginFull !== null && econ.marginFull < 0 ? "text-red-600" : ""}`}>
+                {unlimitedMinutes || econ.marginFull === null ? (
+                  "—"
+                ) : (
+                  <>
+                    {formatCents(econ.marginFull)}{" "}
+                    <span className="text-[11.5px] text-subtle">{formatPercent(marginPercent(econ.marginFull, priceCents))}</span>
+                  </>
+                )}
               </dd>
             </div>
             <div>
